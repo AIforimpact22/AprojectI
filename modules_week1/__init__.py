@@ -75,6 +75,7 @@ def show():
         ("1.8 APIs", tab8.show),
         ("1.9 Assignment 2", tab9.show),
         ("1.10 Real-Time", tab10.show)
+        ("1.11 Real-Time", tab11.show)
     ]
 
     # Load update tabs for Week 1.
