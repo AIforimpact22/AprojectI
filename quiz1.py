@@ -184,84 +184,83 @@ def show():
 
     if verify_button:
         if validate_password(password):
-            st.success("✅ Password validated. You can proceed with the quiz.")
+            st.success("✅ Password validated.")
             st.session_state["validated"] = True
         else:
             st.error("❌ Invalid password. Please ensure your password is registered.")
             st.session_state["validated"] = False
 
-    if st.session_state.get("validated", False):
-        # Step 2: Answer the Questions with pale blue text
-        st.markdown("<h2 style='color: #ADD8E6;'>Step 2: Answer the Questions</h2>", unsafe_allow_html=True)
+    # (Lock removed) Always display Step 2: Answer the Questions
+    st.markdown("<h2 style='color: #ADD8E6;'>Step 2: Answer the Questions</h2>", unsafe_allow_html=True)
 
-        if "user_answers_quiz1" not in st.session_state:
-            st.session_state["user_answers_quiz1"] = [None] * len(questions)
+    if "user_answers_quiz1" not in st.session_state:
+        st.session_state["user_answers_quiz1"] = [None] * len(questions)
 
-        # Display quiz questions with improved UI
-        for i, question in enumerate(questions):
-            with st.container():
-                st.markdown(f"""
-                    <div class="question-container">
-                        <div class="question-text">
-                            Q{i+1}: {question['question']}
-                        </div>
+    # Display quiz questions with improved UI
+    for i, question in enumerate(questions):
+        with st.container():
+            st.markdown(f"""
+                <div class="question-container">
+                    <div class="question-text">
+                        Q{i+1}: {question['question']}
                     </div>
-                """, unsafe_allow_html=True)
-                
-                answer = st.radio(
-                    "",  # Empty label
-                    options=question["options"],
-                    key=f"question_quiz1_{i}",
-                    label_visibility="collapsed",
-                    index=None  # Ensures no option is pre-selected
-                )
-                st.session_state["user_answers_quiz1"][i] = answer
-
-        # Submit Button with improved styling
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            submit_button = st.button(
-                "Submit Quiz",
-                type="primary",
-                use_container_width=True,
-            )
-
-        if submit_button:
-            if st.session_state["quiz1_attempts"] >= MAX_ATTEMPTS:
-                st.error("❌ You have reached the maximum number of attempts for this quiz.")
-                return
-
-            if None in st.session_state["user_answers_quiz1"]:
-                st.error("❌ Please answer all questions before submitting.")
-                return
-
-            # Calculate Score
-            score = sum(
-                1 for i, question in enumerate(questions)
-                if st.session_state["user_answers_quiz1"][i] == question["answer"]
-            )
-            total_score = (score / len(questions)) * 100
+                </div>
+            """, unsafe_allow_html=True)
             
-            st.session_state["quiz1_attempts"] += 1
-            
-            # Display score with progress bar
-            st.markdown("### Quiz Results")
-            st.progress(total_score / 100)
-            st.success(f"📊 Your score: {total_score:.1f}/100")
+            answer = st.radio(
+                "",  # Empty label
+                options=question["options"],
+                key=f"question_quiz1_{i}",
+                label_visibility="collapsed",
+                index=None  # Ensures no option is pre-selected
+            )
+            st.session_state["user_answers_quiz1"][i] = answer
 
-            # Update grade in the database (quiz1 column)
-            db_path = st.secrets["general"]["db_path"]
-            try:
-                conn = sqlite3.connect(db_path)
-                cursor = conn.cursor()
-                cursor.execute("UPDATE records SET quiz1 = ? WHERE password = ?", (total_score, password))
-                conn.commit()
-                conn.close()
-                st.success("Grade successfully saved.")
-                # Optional: push the updated DB to GitHub
-                push_db_to_github(db_path)
-            except Exception as e:
-                st.error(f"Error saving grade: {e}")
+    # Submit Button with improved styling
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        submit_button = st.button(
+            "Submit Quiz",
+            type="primary",
+            use_container_width=True,
+        )
+
+    if submit_button:
+        if st.session_state["quiz1_attempts"] >= MAX_ATTEMPTS:
+            st.error("❌ You have reached the maximum number of attempts for this quiz.")
+            return
+
+        if None in st.session_state["user_answers_quiz1"]:
+            st.error("❌ Please answer all questions before submitting.")
+            return
+
+        # Calculate Score
+        score = sum(
+            1 for i, question in enumerate(questions)
+            if st.session_state["user_answers_quiz1"][i] == question["answer"]
+        )
+        total_score = (score / len(questions)) * 100
+        
+        st.session_state["quiz1_attempts"] += 1
+        
+        # Display score with progress bar
+        st.markdown("### Quiz Results")
+        st.progress(total_score / 100)
+        st.success(f"📊 Your score: {total_score:.1f}/100")
+
+        # Update grade in the database (quiz1 column)
+        db_path = st.secrets["general"]["db_path"]
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("UPDATE records SET quiz1 = ? WHERE password = ?", (total_score, password))
+            conn.commit()
+            conn.close()
+            st.success("Grade successfully saved.")
+            # Optional: push the updated DB to GitHub
+            push_db_to_github(db_path)
+        except Exception as e:
+            st.error(f"Error saving grade: {e}")
 
 if __name__ == "__main__":
     show()
