@@ -1,15 +1,15 @@
 import streamlit as st
 from github_progress import get_user_progress, update_user_progress
 from . import tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10
-
 try:
     from . import tab11
 except ImportError:
-    class DummyTab11:
+    # Define a dummy tab11 so that the rest of the code functions.
+    class Tab11:
         @staticmethod
         def show():
-            st.info("Content for Tab 11 is not available.")
-    tab11 = DummyTab11()
+            st.info("Quiz content (tab11) is currently not available.")
+    tab11 = Tab11()
 
 import os
 import re
