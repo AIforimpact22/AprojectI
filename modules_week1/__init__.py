@@ -1,6 +1,6 @@
 import streamlit as st
 from github_progress import get_user_progress, update_user_progress
-from . import tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10
+from . import tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11
 import os
 import re
 import importlib.util
@@ -17,7 +17,7 @@ def parse_tab_title(title):
     """
     Extracts a numeric tuple from the beginning of the title.
     E.g., "1.1 Introduction to Python" -> (1, 1)
-          "1.1.1 New" -> (1, 1, 1)
+          "1.1.1 Advanced" -> (1, 1, 1)
     """
     m = re.match(r"(\d+(?:\.\d+)*)(.*)", title)
     if m:
@@ -32,10 +32,13 @@ def parse_tab_title(title):
 def load_update_tabs():
     """
     Loads update tabs for Week 1 from the updates folder.
-    Each update module should define a variable TAB_TITLE.
+    Each update module should define a variable TAB_TITLE (a string starting with "1.")
+    and a function show() that renders the content.
     """
     update_tabs = []
-    updates_folder = os.path.join(os.getcwd(), "updates")
+    # Use the directory of this file as the base to locate the updates folder.
+    base_dir = os.path.dirname(__file__)
+    updates_folder = os.path.join(base_dir, "updates")
     if os.path.isdir(updates_folder):
         for file in os.listdir(updates_folder):
             if file.endswith("update.py"):
@@ -44,13 +47,20 @@ def load_update_tabs():
                 sanitized_module_name = file[:-3].replace('.', '_')
                 try:
                     spec = importlib.util.spec_from_file_location(sanitized_module_name, filepath)
+                    if spec is None or spec.loader is None:
+                        st.error(f"Could not load spec for {file}.")
+                        continue
                     mod = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(mod)
-                    if hasattr(mod, "show"):
-                        # Retrieve TAB_TITLE from the module. It should start with "1." for Week 1.
-                        title = getattr(mod, "TAB_TITLE", None)
-                        if title and title.startswith("1."):
+                    # Check that the module provides both a show function and a valid TAB_TITLE.
+                    if hasattr(mod, "show") and hasattr(mod, "TAB_TITLE"):
+                        title = getattr(mod, "TAB_TITLE")
+                        if isinstance(title, str) and title.startswith("1."):
                             update_tabs.append((title, mod.show))
+                        else:
+                            st.warning(f"Module {file} has an invalid TAB_TITLE. It should be a string starting with '1.'")
+                    else:
+                        st.warning(f"Module {file} does not have required attributes 'show' and 'TAB_TITLE'.")
                 except Exception as e:
                     st.error(f"Error loading {file}: {e}")
     return update_tabs
@@ -74,7 +84,8 @@ def show():
         ("1.7 Assignment 1", tab7.show),
         ("1.8 APIs", tab8.show),
         ("1.9 Assignment 2", tab9.show),
-        ("1.10 Real-Time", tab10.show)
+        ("1.10 Real-Time", tab10.show),
+        ("1.11 Quiz 1", tab11.show)
     ]
 
     # Load update tabs for Week 1.
