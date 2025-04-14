@@ -1,6 +1,16 @@
 import streamlit as st
 from github_progress import get_user_progress, update_user_progress
-from . import tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11
+from . import tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10
+
+try:
+    from . import tab11
+except ImportError:
+    class DummyTab11:
+        @staticmethod
+        def show():
+            st.info("Content for Tab 11 is not available.")
+    tab11 = DummyTab11()
+
 import os
 import re
 import importlib.util
