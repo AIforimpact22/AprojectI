@@ -23,7 +23,7 @@ def show():
         st.subheader("Content:")
         st.write(content if content else "No content available. Please update accordingly.")
     else:
-        # Fallback to original static content.
+        # Fallback to the original static content.
         st.header("1.1 Introduction to Python - Recorded Session")
         st.video("https://www.youtube.com/watch?v=Scem9sKTtJo")
         st.subheader("ChatGPT Prompts")
