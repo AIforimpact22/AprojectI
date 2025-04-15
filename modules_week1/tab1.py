@@ -1,34 +1,37 @@
 import streamlit as st
-import sqlite3
+from sqlalchemy import create_engine, text
 
-def get_update(tab):
-    """Fetch update data for the specified tab from the database."""
-    conn = sqlite3.connect("updates.db")
-    c = conn.cursor()
-    c.execute("SELECT title, video_url, content FROM updates WHERE tab = ?", (tab,))
-    row = c.fetchone()
-    conn.close()
-    return row
+# Load the connection string from your secrets file.
+DATABASE_URL = st.secrets["postgres"]["DATABASE_URL"]
+engine = create_engine(DATABASE_URL)
+
+def get_tab_update(tab_name: str):
+    """Fetch the latest update record for the given tab."""
+    query = text("""
+        SELECT title, video_url, content 
+        FROM tab_updates 
+        WHERE tab_name = :tab_name 
+        ORDER BY updated_at DESC LIMIT 1
+    """)
+    with engine.connect() as connection:
+        result = connection.execute(query, {"tab_name": tab_name}).fetchone()
+        return result
 
 def show():
-    # Try to load update data for tab1 from the database.
-    update_data = get_update("tab1")
-    if update_data:
-        title, video_url, content = update_data
-        st.header(title if title else "1.1 Introduction to Python - Recorded Session")
-        if video_url:
-            st.video(video_url)
-        else:
-            st.info("No video URL provided. Please update this field in the update section.")
-        st.subheader("Content:")
-        st.write(content if content else "No content available. Please update accordingly.")
+    # Try to fetch an update for "tab1"
+    update = get_tab_update("tab1")
+    if update:
+        st.header(update.title)
+        if update.video_url:
+            st.video(update.video_url)
+        st.markdown(update.content, unsafe_allow_html=True)
     else:
-        # Fallback to the original static content.
+        # Default content if no update exists.
         st.header("1.1 Introduction to Python - Recorded Session")
         st.video("https://www.youtube.com/watch?v=Scem9sKTtJo")
-        st.subheader("ChatGPT Prompts")
+        st.subheader("**ChatGPT Prompts**")
         st.markdown("[Links to an external site](https://chatgpt.com/share/6733c214-7ac4-8004-92f1-227d11b644ff)")
-        st.subheader("Content:")
+        st.subheader("**Content**:")
         st.write(
             "In this session, we’ll introduce you to the basics of Python and how it can be a powerful tool for enhancing personal impact, "
             "whether you're looking to automate tasks, analyze data, or create small projects. We will cover foundational topics such as "
