@@ -1,50 +1,44 @@
+# update.py
 import streamlit as st
-from sqlalchemy import create_engine, text
-import datetime
+import json
+from handle import get_tab_content, update_tab_content
 
-# Configure the database connection using the secret (adjust the key names accordingly)
-DATABASE_URL = st.secrets["postgres"]["DATABASE_URL"]
+def main():
+    st.title("Update Tab Content")
 
-# Create the SQLAlchemy engine.
-engine = create_engine(DATABASE_URL)
+    # Select which tab content you want to update.
+    tab_name = st.selectbox("Select Tab to Update", ["tab1", "tab2", "tab3"])
 
-def update_tab_in_db(tab_name: str, title: str, video_url: str, content: str):
-    """Insert a new update record for the given tab."""
-    query = text("""
-        INSERT INTO tab_updates (tab_name, title, video_url, content, updated_at)
-        VALUES (:tab_name, :title, :video_url, :content, :updated_at)
-    """)
-    with engine.connect() as connection:
-        connection.execute(query, {
-            "tab_name": tab_name,
-            "title": title,
-            "video_url": video_url,
-            "content": content,
-            "updated_at": datetime.datetime.now()
-        })
+    # Fetch existing content from the database (if any)
+    existing_content = get_tab_content(tab_name)
+    if existing_content:
+        default_title = existing_content.get("title", "")
+        default_video_url = existing_content.get("video_url", "")
+        default_content = existing_content.get("content", "")
+        # For formatting_options, convert JSON/dict to a JSON string for display if needed.
+        default_options = existing_content.get("formatting_options", {})
+    else:
+        default_title = ""
+        default_video_url = ""
+        default_content = ""
+        default_options = {}
 
-def update_form():
-    st.header("Update a Tab")
-    
-    # You can define the list of available tab names
-    available_tabs = [
-        "tab1", "tab2", "tab3", "tab4", "tab5", 
-        "tab6", "tab7", "tab8", "tab9", "tab10", "tab11"
-    ]
-    selected_tab = st.selectbox("Select Tab to Update", available_tabs)
+    # Input elements for content update.
+    title = st.text_input("Title", value=default_title)
+    video_url = st.text_input("Video URL", value=default_video_url)
+    content = st.text_area("Content", value=default_content, height=300)
 
-    # Inputs: Title, Video URL, and rich text (Markdown supported)
-    new_title = st.text_input("New Title (can include HTML/Markdown for styling)")
-    new_video_url = st.text_input("New Video URL")
-    new_content = st.text_area("New Content (Supports Markdown - for bold, colored text, etc.)")
+    st.markdown("### Formatting Options")
+    # Dropdowns for text color and font weight.
+    color = st.selectbox("Text Color", ["black", "blue", "red", "green", "gold", "pale blue"],
+                         index=["black", "blue", "red", "green", "gold", "pale blue"].index(default_options.get("color", "black")))
+    font_weight = st.selectbox("Font Weight", ["normal", "bold"],
+                               index=["normal", "bold"].index(default_options.get("font_weight", "normal")))
+    formatting_options = {"color": color, "font_weight": font_weight}
 
-    if st.button("Update Tab"):
-        # Basic validation could be added here.
-        if new_title:
-            update_tab_in_db(selected_tab, new_title, new_video_url, new_content)
-            st.success(f"{selected_tab} updated successfully!")
-        else:
-            st.error("Please provide a title to update.")
+    if st.button("Update Content"):
+        update_tab_content(tab_name, title, video_url, content, formatting_options)
+        st.success("Content updated successfully!")
 
 if __name__ == "__main__":
-    update_form()
+    main()
