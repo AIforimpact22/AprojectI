@@ -1,13 +1,15 @@
 # handle.py
-import os
+import streamlit as st
 import psycopg2
 import json
 
 def get_connection():
-    # Ensure that your DATABASE_URL environment variable is set with Neon’s connection string
-    DATABASE_URL = os.getenv("DATABASE_URL")
+    # Retrieve the connection string from Streamlit secrets.
+    # If you stored it under a section, access it appropriately.
+    # Here we assume the key is: st.secrets["database"]["DATABASE_URL"]
+    DATABASE_URL = st.secrets["database"]["DATABASE_URL"]
     if not DATABASE_URL:
-        raise ValueError("DATABASE_URL environment variable not set.")
+        raise ValueError("DATABASE_URL is not set in Streamlit secrets.")
     return psycopg2.connect(DATABASE_URL)
 
 def get_tab_content(tab_name):
@@ -46,7 +48,6 @@ def update_tab_content(tab_name, title, video_url, content, formatting_options):
           formatting_options = EXCLUDED.formatting_options,
           updated_at = NOW();
     """
-    # formatting_options should be passed as a JSON string; you can store a JSON string here
     cur.execute(query, (tab_name, title, video_url, content, json.dumps(formatting_options)))
     conn.commit()
     cur.close()
