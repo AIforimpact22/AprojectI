@@ -1,72 +1,63 @@
 import streamlit as st
-import os
-import glob
+import sqlite3
 
-# Set the admin password (as provided)
-admin_password = "meer"
+# Path to the SQLite database
+DB_PATH = "updates.db"
 
-def check_admin():
-    """Ask for the admin password and validate it."""
-    password = st.sidebar.text_input("Enter admin password", type="password")
-    if password != admin_password:
-        st.sidebar.error("Incorrect password. Please try again.")
-        return False
-    return True
+def get_update(tab_name):
+    """Fetch the current update details for the selected tab."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT title, video_url, content FROM updates WHERE tab_name = ?", (tab_name,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return row
+    else:
+        # Return empty values if nothing is saved yet.
+        return ("", "", "")
 
-def get_tab_files():
-    """Search for tab files (e.g. tab*.py) in the specified modules_week directories."""
-    tab_files = []
-    # List of directories where tab files are stored
-    directories = ["modules_week1", "modules_week2", "modules_week3", "modules_week4", "modules_week5"]
-    for d in directories:
-        # Look for files that start with "tab" and end with ".py"
-        pattern = os.path.join(d, "tab*.py")
-        files = glob.glob(pattern)
-        tab_files.extend(files)
-    return tab_files
-
-def load_file(file_path):
-    """Read and return the content of a file."""
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    except Exception as e:
-        st.error(f"Error reading {file_path}: {e}")
-        return ""
-
-def save_file(file_path, content):
-    """Write the provided content to a file."""
-    try:
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        st.success(f"Saved changes to {file_path}")
-    except Exception as e:
-        st.error(f"Error saving {file_path}: {e}")
+def update_update(tab_name, title, video_url, content):
+    """Insert or update the update record for a given tab."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    # Check if this tab already has an update
+    cursor.execute("SELECT id FROM updates WHERE tab_name = ?", (tab_name,))
+    row = cursor.fetchone()
+    if row:
+        cursor.execute("""
+            UPDATE updates 
+            SET title = ?, video_url = ?, content = ? 
+            WHERE tab_name = ?
+        """, (title, video_url, content, tab_name))
+    else:
+        cursor.execute("""
+            INSERT INTO updates (tab_name, title, video_url, content)
+            VALUES (?, ?, ?, ?)
+        """, (tab_name, title, video_url, content))
+    conn.commit()
+    conn.close()
 
 def main():
-    st.title("Update Tabs")
-    st.write("This page displays all tab files as HTML for editing purposes.")
-    
-    # Check admin password before proceeding
-    if not check_admin():
-        st.stop()
-    
-    # Get the list of tab files from the modules directories
-    tab_files = get_tab_files()
-    if not tab_files:
-        st.write("No tab files found.")
-        return
+    st.title("Update Tab Content")
+    st.write("Select a tab to update its content details.")
 
-    # Allow selection of a tab file from a sidebar dropdown
-    selected_file = st.sidebar.selectbox("Select a tab file to edit", tab_files)
-    file_content = load_file(selected_file)
-    
-    # Display file content in a text area for editing (you could also use st.code() to display as code)
-    edited_content = st.text_area(f"Editing {selected_file}", value=file_content, height=400)
-    
-    # Save changes button: write the edited content back to the file
-    if st.button("Save Changes"):
-        save_file(selected_file, edited_content)
+    # Dropdown to select the tab. Update the options if you have more/less tabs.
+    tab_options = ["tab1", "tab2", "tab3", "tab4", "tab5", "tab6", "tab7", "tab8", "tab9", "tab10", "tab11"]
+    selected_tab = st.selectbox("Select Tab", tab_options)
+
+    # Fetch current update details for the selected tab
+    current_title, current_video_url, current_content = get_update(selected_tab)
+
+    # Input fields for title, video URL, and text content.
+    new_title = st.text_input("Title", value=current_title)
+    new_video_url = st.text_input("Video URL", value=current_video_url)
+    new_content = st.text_area("Content", value=current_content, height=300)
+
+    # Button to save the changes.
+    if st.button("Save"):
+        update_update(selected_tab, new_title, new_video_url, new_content)
+        st.success(f"Content for {selected_tab} has been updated.")
 
 if __name__ == "__main__":
     main()
