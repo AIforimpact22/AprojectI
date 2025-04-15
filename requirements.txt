@@ -10,5 +10,4 @@ pillow
 PyGithub
 pillow
 openpyxl
-psycopg2
 psycopg2-binary
