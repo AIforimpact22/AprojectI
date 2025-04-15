@@ -5,16 +5,15 @@ import json
 
 def get_connection():
     try:
-        DATABASE_URL = st.secrets["database"]["DATABASE_URL"]
+        DATABASE_URL = st.secrets["DATABASE_URL"]
     except KeyError as e:
-        raise KeyError("DATABASE_URL not found in st.secrets under [database]. Check your secrets.toml or Streamlit Cloud settings.") from e
+        raise KeyError("DATABASE_URL not found in st.secrets. Check your secrets.toml or Streamlit Cloud settings.") from e
 
     if not DATABASE_URL:
         raise ValueError("DATABASE_URL is empty in st.secrets.")
     return psycopg2.connect(DATABASE_URL)
 
 def get_tab_content(tab_name):
-    """Fetch content for a given tab from the database."""
     conn = get_connection()
     cur = conn.cursor()
     query = """
@@ -36,7 +35,6 @@ def get_tab_content(tab_name):
     return None
 
 def update_tab_content(tab_name, title, video_url, content, formatting_options):
-    """Insert new content or update the existing content for a given tab."""
     conn = get_connection()
     cur = conn.cursor()
     query = """
