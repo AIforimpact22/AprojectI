@@ -1,13 +1,35 @@
+# tab1.py
 import streamlit as st
+import json
+from handle import get_tab_content
 
 def show():
-    st.header("1.1 Introduction to Python - Recorded Session")
-    st.video("https://www.youtube.com/watch?v=Scem9sKTtJo")
-    st.subheader("**ChatGPT Prompts**")
-    st.markdown("[Links to an external site](https://chatgpt.com/share/6733c214-7ac4-8004-92f1-227d11b644ff)")
-    st.subheader("**Content**:")
-    st.write(
-        "In this session, we’ll introduce you to the basics of Python and how it can be a powerful tool for enhancing personal impact, "
-        "whether you're looking to automate tasks, analyze data, or create small projects. We will cover foundational topics such as "
-        "setting up your Python environment, understanding Python syntax, and exploring the practical applications of Python in everyday scenarios."
-    )
+    # Load and show the content for "tab1" from the database.
+    content_data = get_tab_content("tab1")
+    st.write("DEBUG: Fetched content:", content_data)  # Debug line
+    if content_data:
+        st.header(content_data.get("title", "No Title"))
+        st.video(content_data.get("video_url", ""))
+        # Apply formatting options
+        formatting_options = content_data.get("formatting_options")
+        try:
+            if isinstance(formatting_options, str):
+                options = json.loads(formatting_options)
+            else:
+                options = formatting_options
+        except Exception:
+            options = {}
+        style = ""
+        if options.get("color"):
+            style += f"color: {options['color']};"
+        if options.get("font_weight"):
+            style += f" font-weight: {options['font_weight']};"
+        st.markdown(
+            f"<div style='{style}'>{content_data.get('content')}</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        st.warning("No content found for this tab. Please update the content from the update page.")
+
+if __name__ == "__main__":
+    show()
