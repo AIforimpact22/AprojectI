@@ -10,7 +10,7 @@ def show():
         st.header(content_data.get("title", "No Title"))
         st.video(content_data.get("video_url", ""))
         
-        # Fetch and parse formatting options
+        # Process formatting options.
         formatting_options = content_data.get("formatting_options")
         options = {}
         if formatting_options:
@@ -22,7 +22,6 @@ def show():
             else:
                 options = formatting_options
         
-        # Build inline CSS style string
         style = ""
         if options.get("color"):
             style += f"color: {options['color']};"
