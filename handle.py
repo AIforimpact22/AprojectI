@@ -4,12 +4,13 @@ import psycopg2
 import json
 
 def get_connection():
-    # Retrieve the connection string from Streamlit secrets.
-    # If you stored it under a section, access it appropriately.
-    # Here we assume the key is: st.secrets["database"]["DATABASE_URL"]
-    DATABASE_URL = st.secrets["database"]["DATABASE_URL"]
+    try:
+        DATABASE_URL = st.secrets["database"]["DATABASE_URL"]
+    except KeyError as e:
+        raise KeyError("DATABASE_URL not found in st.secrets under [database]. Check your secrets.toml or Streamlit Cloud settings.") from e
+
     if not DATABASE_URL:
-        raise ValueError("DATABASE_URL is not set in Streamlit secrets.")
+        raise ValueError("DATABASE_URL is empty in st.secrets.")
     return psycopg2.connect(DATABASE_URL)
 
 def get_tab_content(tab_name):
