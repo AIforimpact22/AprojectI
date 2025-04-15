@@ -54,7 +54,7 @@ def main():
     if st.button("Update"):
         upsert_update(tab_choice, title, video_url, content)
         st.success(f"Update for {tab_choice} saved successfully.")
-        # Safely refresh the page.
+        # Automatic refresh if available.
         if hasattr(st, "experimental_rerun"):
             st.experimental_rerun()
         else:
