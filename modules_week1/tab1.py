@@ -1,29 +1,29 @@
 import streamlit as st
 import sqlite3
 
-DB_PATH = "updates.db"
-
-def get_update_for_tab(tab_name="tab1"):
-    """Retrieve update content for a given tab from the database."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT title, video_url, content FROM updates WHERE tab_name = ?", (tab_name,))
-    row = cursor.fetchone()
+def get_update(tab):
+    """Fetch update data for the specified tab from the database."""
+    conn = sqlite3.connect("updates.db")
+    c = conn.cursor()
+    c.execute("SELECT title, video_url, content FROM updates WHERE tab = ?", (tab,))
+    row = c.fetchone()
     conn.close()
-    return row  # Returns a tuple (title, video_url, content) or None if not set
+    return row
 
 def show():
-    # Try fetching the updated content for tab1.
-    data = get_update_for_tab("tab1")
-    if data:
-        title, video_url, content = data
-        st.header(title)
+    # Try to load update data for tab1 from the database.
+    update_data = get_update("tab1")
+    if update_data:
+        title, video_url, content = update_data
+        st.header(title if title else "1.1 Introduction to Python - Recorded Session")
         if video_url:
             st.video(video_url)
-        st.subheader("Content")
-        st.write(content)
+        else:
+            st.info("No video URL provided. Please update this field in the update section.")
+        st.subheader("Content:")
+        st.write(content if content else "No content available. Please update accordingly.")
     else:
-        # Fallback content if no update is in the database yet.
+        # Fallback to original static content.
         st.header("1.1 Introduction to Python - Recorded Session")
         st.video("https://www.youtube.com/watch?v=Scem9sKTtJo")
         st.subheader("ChatGPT Prompts")
