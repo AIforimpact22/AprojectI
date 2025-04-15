@@ -10,4 +10,5 @@ pillow
 PyGithub
 pillow
 openpyxl
+sqlalchemy
 psycopg2-binary
