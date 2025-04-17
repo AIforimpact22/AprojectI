@@ -1,46 +1,73 @@
 # update.py
 import streamlit as st
-import json
-from handle import get_tab_content, update_tab_content
+import psycopg2
+from psycopg2 import sql
 
+# --- Helpers ---
+@st.cache_resource
+def get_conn():
+    creds = st.secrets["postgres"]
+    return psycopg2.connect(
+        host     = creds["host"],
+        port     = creds["port"],
+        user     = creds["user"],
+        password = creds["password"],
+        dbname   = creds["dbname"]
+    )
+
+def list_schemas_and_tabs(conn):
+    """Return dict: { 'intro': [], 'week1': ['tab1','tab2',...], ... }"""
+    cur = conn.cursor()
+    # load week schemas
+    cur.execute("""
+      SELECT nspname
+      FROM pg_namespace
+      WHERE nspname LIKE 'modules_week%';
+    """)
+    weeks = [row[0] for row in cur.fetchall()]
+    result = {"intro": []}
+    for wk in weeks:
+        cur.execute(sql.SQL(
+          "SELECT tablename FROM pg_tables WHERE schemaname = %s ORDER BY tablename;"
+        ), [wk])
+        tabs = [r[0] for r in cur.fetchall()]
+        result[wk.split('_')[-1]] = tabs
+    cur.close()
+    return result
+
+def fetch_content(conn, schema, table):
+    cur = conn.cursor()
+    query = sql.SQL("SELECT title, video_url, content FROM {}.{};")\
+            .format(sql.Identifier(schema), sql.Identifier(table))
+    cur.execute(query)
+    rows = cur.fetchall()
+    cur.close()
+    return rows
+
+def render(rows):
+    for title, video_url, content in rows:
+        st.title(title)
+        if video_url:
+            st.video(video_url)
+        # allow HTML/markdown
+        st.markdown(content, unsafe_allow_html=True)
+
+# --- Main ---
 def main():
-    st.title("Update Tab Content")
-    
-    # Allow admin to choose which tab to update.
-    tab_name = st.selectbox("Select Tab to Update", ["tab1", "tab2", "tab3"])
-    
-    # Retrieve any existing content for the selected tab.
-    existing_content = get_tab_content(tab_name)
-    if existing_content:
-        default_title = existing_content.get("title", "")
-        default_video_url = existing_content.get("video_url", "")
-        default_content = existing_content.get("content", "")
-        default_formatting = existing_content.get("formatting_options", {})
+    st.set_page_config(page_title="Course Updates", layout="wide")
+    conn = get_conn()
+    modules = list_schemas_and_tabs(conn)
+
+    st.sidebar.header("Select Module")
+    choice = st.sidebar.selectbox("Module", list(modules.keys()), index=0)
+
+    if choice != "intro":
+        tab = st.sidebar.selectbox("Tab", modules[choice])
+        rows = fetch_content(conn, f"modules_week{choice}", tab)
     else:
-        default_title = ""
-        default_video_url = ""
-        default_content = ""
-        default_formatting = {}
+        rows = fetch_content(conn, "public", "modules_intro")
 
-    title = st.text_input("Title", value=default_title)
-    video_url = st.text_input("Video URL", value=default_video_url)
-    content = st.text_area("Content", value=default_content, height=300)
-
-    st.markdown("### Formatting Options")
-    colors = ["black", "blue", "red", "green", "gold", "pale blue"]
-    default_color = default_formatting.get("color", "black")
-    color = st.selectbox("Text Color", colors, index=colors.index(default_color) if default_color in colors else 0)
-    
-    font_weights = ["normal", "bold"]
-    default_weight = default_formatting.get("font_weight", "normal")
-    font_weight = st.selectbox("Font Weight", font_weights, index=font_weights.index(default_weight) if default_weight in font_weights else 0)
-    
-    formatting_options = {"color": color, "font_weight": font_weight}
-
-    if st.button("Update Content"):
-        update_tab_content(tab_name, title, video_url, content, formatting_options)
-        st.success("Content updated successfully!")
-        st.experimental_rerun()
+    render(rows)
 
 if __name__ == "__main__":
     main()
