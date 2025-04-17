@@ -3,69 +3,70 @@ import streamlit as st
 import psycopg2
 from psycopg2 import sql
 
-# --- Helpers ---
+# ————————————————
+# 1) Connect (use a single secret: "db_url")
 @st.cache_resource
-def get_conn():
-    creds = st.secrets["postgres"]
-    return psycopg2.connect(
-        host     = creds["host"],
-        port     = creds["port"],
-        user     = creds["user"],
-        password = creds["password"],
-        dbname   = creds["dbname"]
-    )
+def get_connection():
+    # Put your full connection string in Secrets as: db_url = "postgres://user:pass@host:port/dbname"
+    return psycopg2.connect(st.secrets["db_url"])
 
-def list_schemas_and_tabs(conn):
-    """Return dict: { 'intro': [], 'week1': ['tab1','tab2',...], ... }"""
+# ————————————————
+# 2) Discover all modules & tabs
+def get_modules(conn):
     cur = conn.cursor()
-    # load week schemas
+    # find all "modules_weekX" schemas
     cur.execute("""
-      SELECT nspname
-      FROM pg_namespace
-      WHERE nspname LIKE 'modules_week%';
+        SELECT nspname
+          FROM pg_namespace
+         WHERE nspname LIKE 'modules_week%';
     """)
-    weeks = [row[0] for row in cur.fetchall()]
-    result = {"intro": []}
-    for wk in weeks:
-        cur.execute(sql.SQL(
-          "SELECT tablename FROM pg_tables WHERE schemaname = %s ORDER BY tablename;"
-        ), [wk])
+    schemas = [row[0] for row in cur.fetchall()]
+    modules = {"intro": []}
+    for schema in schemas:
+        week = schema.split("_")[-1]
+        cur.execute(
+            "SELECT tablename FROM pg_tables WHERE schemaname = %s ORDER BY tablename;",
+            (schema,)
+        )
         tabs = [r[0] for r in cur.fetchall()]
-        result[wk.split('_')[-1]] = tabs
+        modules[week] = tabs
     cur.close()
-    return result
+    return modules
 
+# ————————————————
+# 3) Fetch content for one table
 def fetch_content(conn, schema, table):
     cur = conn.cursor()
-    query = sql.SQL("SELECT title, video_url, content FROM {}.{};")\
-            .format(sql.Identifier(schema), sql.Identifier(table))
-    cur.execute(query)
+    q = sql.SQL("SELECT title, video_url, content FROM {}.{};")\
+           .format(sql.Identifier(schema), sql.Identifier(table))
+    cur.execute(q)
     rows = cur.fetchall()
     cur.close()
     return rows
 
+# ————————————————
+# 4) Render rows
 def render(rows):
     for title, video_url, content in rows:
-        st.title(title)
+        st.markdown(f"## {title}")
         if video_url:
             st.video(video_url)
-        # allow HTML/markdown
         st.markdown(content, unsafe_allow_html=True)
 
-# --- Main ---
+# ————————————————
+# 5) Main app
 def main():
-    st.set_page_config(page_title="Course Updates", layout="wide")
-    conn = get_conn()
-    modules = list_schemas_and_tabs(conn)
+    st.set_page_config(page_title="Course Content", layout="wide")
+    conn    = get_connection()
+    modules = get_modules(conn)
 
-    st.sidebar.header("Select Module")
-    choice = st.sidebar.selectbox("Module", list(modules.keys()), index=0)
+    choice = st.sidebar.selectbox("Module", list(modules.keys()))
 
-    if choice != "intro":
-        tab = st.sidebar.selectbox("Tab", modules[choice])
-        rows = fetch_content(conn, f"modules_week{choice}", tab)
-    else:
+    if choice == "intro":
         rows = fetch_content(conn, "public", "modules_intro")
+    else:
+        tab   = st.sidebar.selectbox("Tab", modules[choice])
+        rows  = fetch_content(conn, f"modules_{choice}", tab)
 
     render(rows)
 
