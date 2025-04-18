@@ -2,9 +2,13 @@
 import streamlit as st
 
 def navigation() -> str:
-    st.sidebar.header("📂 Navigation")
-    return st.sidebar.radio(
-        label="",
-        options=["Content Manager", "Table Editor"],
-        index=0,
-    )
+    st.sidebar.header("📂 admin")
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        content_manager = st.button("Content Manager")
+    with col2:
+        table_editor = st.button("Table Editor")
+    
+    if table_editor:
+        return "Table Editor"
+    return "Content Manager"  # Default selection
