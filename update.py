@@ -10,6 +10,8 @@ from updatesidbare import navigation
 import tabledit
 
 # ──────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────
 def safe_rerun():
     if hasattr(st, "experimental_rerun"):
         st.experimental_rerun()
@@ -26,7 +28,26 @@ def get_engine():
 
 engine = get_engine()
 
-TAB_NAMES   = ["intro"] + [f"tab{i}" for i in range(1, 51)]
+# ──────────────────────────────────────────────────────────────
+# 1️⃣ TABLE NAME MAPPING
+# Internal names (your actual Neon tables) and
+# Display names (what the user sees)
+INTERNAL_TABS = [
+    "intro",
+    *[f"tab{i}" for i in range(1, 51)]
+]
+DISPLAY_TABS = [
+    "intro",
+    "w1tab1","w1tab2","w1tab3","w1tab4","w1tab5","w1tab6","w1tab7","w1tab8","w1tab9","w1tab10","w1tab11",
+    "w1tab12",
+    "w2tab1","w2tab2","w2tab3","w2tab4","w2tab5","w2tab6","w2tab7","w2tab8","w2tab9","w2tab10","w2tab11","w2tab12",
+    "w3tab1","w3tab2","w3tab3","w3tab4","w3tab5","w3tab6","w3tab7","w3tab8","w3tab9","w3tab10","w3tab11","w3tab12",
+    "w4tab1","w4tab2","w4tab3","w4tab4","w4tab5","w4tab6","w4tab7",
+    "w5tab1","w5tab2","w5tab3","w5tab4","w5tab5","w5tab6","w5tab7","w5tab8"
+]
+# Build a lookup: display → internal
+TAB_LOOKUP = dict(zip(DISPLAY_TABS, INTERNAL_TABS))
+
 BLOCK_TYPES = {
     "Text":        "text",
     "YouTube URL": "youtube",
@@ -34,6 +55,7 @@ BLOCK_TYPES = {
     "Embed URL":   "embed",
     "CSV → Table": "csv",
 }
+# ──────────────────────────────────────────────────────────────
 
 def ensure_https(u: str) -> str:
     return u if u.startswith(("http://","https://")) else "https://" + u
@@ -98,7 +120,6 @@ def delete_title_db(chosen: str):
                 {"id": st.session_state["row_id"]},
             )
 
-# ──────────────────────────────────────────────────────────────
 def block_html(block: dict) -> str:
     t, p = block["type"], block["payload"]
     if t == "text":
@@ -124,7 +145,6 @@ def block_html(block: dict) -> str:
             f'<!--BLOCK_START:embed-->'
             f'<iframe src="{url}" style="width:100%;height:420px;border:none;"></iframe><!--BLOCK_END-->'
         )
-    # CSV
     txt = (p.get("csv") or "").strip()
     if not txt:
         return ""
@@ -170,7 +190,7 @@ def html_to_blocks(html: str) -> list[dict]:
     return blocks
 
 # ──────────────────────────────────────────────────────────────
-# prime_state now only runs on table change
+# prime_state runs only on table change
 # ──────────────────────────────────────────────────────────────
 def prime_state(table: str):
     if "table" not in st.session_state or st.session_state["table"] != table:
@@ -190,7 +210,10 @@ if mode == "Table Editor":
     tabledit.main()
 else:
     st.sidebar.header("📑 Content Manager")
-    chosen = st.sidebar.selectbox("Pick a table", TAB_NAMES)
+
+    # ─── select display name ─────────────────────────────────
+    chosen_display = st.sidebar.selectbox("Pick a section", DISPLAY_TABS)
+    chosen = TAB_LOOKUP[chosen_display]
     prime_state(chosen)
 
     # Title
