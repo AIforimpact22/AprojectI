@@ -4,6 +4,7 @@ import re, uuid, io, urllib.parse
 import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine, text
+import streamlit.components.v1 as components
 
 from updatesidbare import navigation
 import tabledit
@@ -40,12 +41,12 @@ TAB_NAMES   = [
 ]
 BLOCK_TYPES = {
     "Text":        "text",
+    "Text/Rich":   "richtext",
+    "Text/HTML":   "html",
     "YouTube URL": "youtube",
     "Image URL":   "image",
     "Embed URL":   "embed",
     "CSV → Table": "csv",
-    "Text/Rich":   "rich",  # New block type for Rich Text
-    "Text/HTML":   "html",  # New block type for HTML input
 }
 
 def ensure_https(u: str) -> str:
@@ -111,21 +112,74 @@ def delete_title_db(chosen: str):
                 {"id": st.session_state["row_id"]},
             )
 
+# Rich Text Editor Component
+def rich_text_editor(content, key):
+    # Using TinyMCE editor component
+    editor_height = 300
+    return components.html(
+        f"""
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/6.4.2/tinymce.min.js" referrerpolicy="origin"></script>
+        <div style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+            <textarea id="editor-{key}" style="width: 100%; height: {editor_height}px;">{content}</textarea>
+        </div>
+        <script>
+        tinymce.init({{
+            selector: '#editor-{key}',
+            height: {editor_height},
+            menubar: true,
+            plugins: [
+                'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
+                'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
+                'insertdatetime', 'media', 'table', 'help', 'wordcount'
+            ],
+            toolbar: 'undo redo | formatselect | ' +
+                'bold italic backcolor forecolor | alignleft aligncenter ' +
+                'alignright alignjustify | bullist numlist outdent indent | ' +
+                'removeformat | help',
+            setup: function(editor) {{
+                editor.on('change', function() {{
+                    const content = editor.getContent();
+                    document.dispatchEvent(new CustomEvent(
+                        'streamlit:componentMessage', {{
+                            detail: {{type: 'setComponentValue', value: content}}
+                        }}
+                    ));
+                }});
+            }}
+        }});
+        </script>
+        """,
+        height=editor_height + 100,
+        key=key
+    )
+
 # ──────────────────────────────────────────────────────────────
 def block_html(block: dict) -> str:
     t, p = block["type"], block["payload"]
     if t == "text":
         return (
-            f'<!--BLOCK_START:text-->' 
-            f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">' 
+            f'<!--BLOCK_START:text-->'
+            f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">'
             f'{p["text"]}</p><!--BLOCK_END-->'
+        )
+    if t == "richtext":
+        return (
+            f'<!--BLOCK_START:richtext-->'
+            f'{p["content"]}'
+            f'<!--BLOCK_END-->'
+        )
+    if t == "html":
+        return (
+            f'<!--BLOCK_START:html-->'
+            f'{p["html"]}'
+            f'<!--BLOCK_END-->'
         )
     if t == "youtube":
         emb = get_youtube_embed(p["url"])
         return (
-            f'<!--BLOCK_START:youtube-->' 
-            f'<iframe width="560" height="315" src="{emb}" frameborder="0" ' 
-            f'allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" ' 
+            f'<!--BLOCK_START:youtube-->'
+            f'<iframe width="560" height="315" src="{emb}" frameborder="0" '
+            f'allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" '
             f'allowfullscreen></iframe><!--BLOCK_END-->'
         )
     if t == "image":
@@ -134,14 +188,8 @@ def block_html(block: dict) -> str:
     if t == "embed":
         url = ensure_https(p["url"])
         return (
-            f'<!--BLOCK_START:embed-->' 
+            f'<!--BLOCK_START:embed-->'
             f'<iframe src="{url}" style="width:100%;height:420px;border:none;"></iframe><!--BLOCK_END-->'
-        )
-    if t == "rich":  # New block type for Rich Text
-        return (
-            f'<!--BLOCK_START:rich-->' 
-            f'<div style="color:{p["color"]};font-size:{p["size"]}px;">' 
-            f'{p["text"]}</div><!--BLOCK_END-->'
         )
     # CSV
     txt = (p.get("csv") or "").strip()
@@ -153,8 +201,8 @@ def block_html(block: dict) -> str:
     except Exception as e:
         return f'<!--BLOCK_START:csv--><p style="color:red;">⚠️ {e}</p><!--BLOCK_END-->'
     return (
-        f'<!--BLOCK_START:csv-->' 
-        f'<div style="color:{p["color"]};font-size:{p["size"]}px;">' 
+        f'<!--BLOCK_START:csv-->'
+        f'<div style="color:{p["color"]};font-size:{p["size"]}px;">'
         f'{raw}</div><!--BLOCK_END-->'
     )
 
@@ -170,6 +218,10 @@ def html_to_blocks(html: str) -> list[dict]:
             if m2:
                 c, s, txt = m2.groups()
                 blocks.append({"uid":uid,"type":"text","payload":{"text":txt,"color":c,"size":int(s)}})
+        elif t == "richtext":
+            blocks.append({"uid":uid,"type":"richtext","payload":{"content":content}})
+        elif t == "html":
+            blocks.append({"uid":uid,"type":"html","payload":{"html":content}})
         elif t == "youtube":
             src = re.search(r'src="([^"]+)"', content).group(1)
             vid = src.split("/")[-1]
@@ -186,11 +238,6 @@ def html_to_blocks(html: str) -> list[dict]:
             c = re.search(r'color:(#[0-9A-Fa-f]{6})', content, re.S).group(1) if "color" in content else "#000"
             s = int(m2.group(1)) if m2 else 14
             blocks.append({"uid":uid,"type":"csv","payload":{"csv":"","color":c,"size":s}})
-        elif t == "rich":  # Parse the new rich text block
-            m2 = re.search(r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px.*?>(.*?)</div>', content, re.S)
-            if m2:
-                c, s, txt = m2.groups()
-                blocks.append({"uid":uid,"type":"rich","payload":{"text":txt,"color":c,"size":int(s)}})
     return blocks
 
 # ──────────────────────────────────────────────────────────────
@@ -260,11 +307,18 @@ else:
     with colB:
         if st.button("➕ Add Block"):
             uid = str(uuid.uuid4()); t = BLOCK_TYPES[new_type]
-            p = ({"text":"","color":"#000000","size":16}
-                 if t=="text" else {"url":""} if t in ("youtube","image","embed")
-                 else {"csv":"","color":"#000000","size":16} if t=="csv"
-                 else {"text":"","color":"#000000","size":16} if t=="rich"  # Initialize for new block type
-                 else {"html":""} if t=="html" else {})
+            
+            if t == "text":
+                p = {"text":"","color":"#000000","size":16}
+            elif t == "richtext":
+                p = {"content":"<p>Edit your rich text here...</p>"}
+            elif t == "html":
+                p = {"html":"<!-- Add your HTML here -->"}
+            elif t in ("youtube","image","embed"):
+                p = {"url":""}
+            else:  # csv
+                p = {"csv":"","color":"#000000","size":16}
+                
             st.session_state["blocks"].append({"uid":uid,"type":t,"payload":p})
 
     for i, blk in enumerate(st.session_state["blocks"]):
@@ -284,19 +338,41 @@ else:
             safe_rerun()
 
         with st.expander("", expanded=st.session_state.get(f"exp_{uid}",False)):
-            if blk["type"] == "text":
-                blk["payload"]["text"] = st.text_area("Text", blk["payload"]["text"], key=f"text_{uid}")
-                blk["payload"]["color"] = st.color_picker("Color", blk["payload"]["color"], key=f"col_{uid}")
-                blk["payload"]["size"] = st.slider("Size(px)", 8, 48, blk["payload"]["size"], key=f"size_{uid}")
-            elif blk["type"] in ("youtube", "image", "embed"):
-                lbl = "Image URL" if blk["type"] == "image" else "URL"
-                blk["payload"]["url"] = st.text_input(lbl, blk["payload"]["url"], key=f"url_{uid}")
-            elif blk["type"] == "rich":
-                blk["payload"]["text"] = st.text_area("Rich Text", blk["payload"]["text"], key=f"rich_{uid}")
-                blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"]["color"], key=f"rich_col_{uid}")
-                blk["payload"]["size"] = st.slider("Font Size(px)", 8, 48, blk["payload"]["size"], key=f"rich_size_{uid}")
-            elif blk["type"] == "html":
-                blk["payload"]["html"] = st.text_area("HTML", blk["payload"]["html"], key=f"html_{uid}")
+            if blk["type"]=="text":
+                blk["payload"]["text"]  = st.text_area("Text",blk["payload"]["text"],key=f"text_{uid}")
+                blk["payload"]["color"] = st.color_picker("Color",blk["payload"]["color"],key=f"col_{uid}")
+                blk["payload"]["size"]  = st.slider("Size(px)",8,48,blk["payload"]["size"],key=f"size_{uid}")
+            elif blk["type"]=="richtext":
+                rich_content = blk["payload"].get("content", "<p>Edit your rich text here...</p>")
+                editor_result = rich_text_editor(rich_content, f"richtext_{uid}")
+                if editor_result:
+                    blk["payload"]["content"] = editor_result
+            elif blk["type"]=="html":
+                blk["payload"]["html"] = st.text_area("HTML", blk["payload"]["html"], height=300, key=f"html_{uid}")
+                with st.expander("HTML Preview"):
+                    st.markdown(blk["payload"]["html"], unsafe_allow_html=True)
+            elif blk["type"] in ("youtube","image","embed"):
+                lbl = "Image URL" if blk["type"]=="image" else "URL"
+                blk["payload"]["url"] = st.text_input(lbl,blk["payload"]["url"],key=f"url_{uid}")
+            else: # csv
+                t1,t2=st.tabs(["Upload","Paste"])
+                with t1:
+                    up=st.file_uploader("CSV",type=["csv"],key=f"file_{uid}")
+                    if up:
+                        try:
+                            df=pd.read_csv(up); st.dataframe(df)
+                            blk["payload"]["csv"]=df.to_csv(index=False)
+                        except Exception as e:
+                            st.error(f"Invalid CSV: {e}")
+                with t2:
+                    txt=st.text_area("CSV text",blk["payload"]["csv"],key=f"csv_{uid}")
+                    blk["payload"]["csv"]=txt
+                    try:
+                        pd.read_csv(io.StringIO(txt)); st.dataframe(pd.read_csv(io.StringIO(txt)))
+                    except:
+                        st.error("Invalid CSV")
+                blk["payload"]["color"]=st.color_picker("Text Color",blk["payload"]["color"],key=f"csv_col_{uid}")
+                blk["payload"]["size"]=st.slider("Font Size(px)",8,48,blk["payload"]["size"],key=f"csv_size_{uid}")
 
         st.markdown("")  # exactly one blank line
 
