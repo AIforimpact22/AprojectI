@@ -1,8 +1,4 @@
 # update.py
-"""
-Tabbed Content Manager with robust CSV→Table support.
-"""
-
 from __future__ import annotations
 import re, uuid, json, io, urllib.parse
 
@@ -13,6 +9,7 @@ from sqlalchemy import create_engine, text
 from updatesidbare import navigation
 import tabledit
 
+# ──────────────────────────────────────────────────────────────
 def safe_rerun():
     if hasattr(st, "experimental_rerun"):
         st.experimental_rerun()
@@ -94,21 +91,18 @@ def block_html(block: dict) -> str:
             f'<!--BLOCK_END-->'
         )
 
-    # CSV: guard against empty or invalid data
+    # CSV → robust
     csv_text = (pld.get("csv") or "").strip()
     if not csv_text:
-        return ""  # nothing to show
-
+        return ""
     try:
         df = pd.read_csv(io.StringIO(csv_text))
     except Exception as e:
-        # render an error message inline
         return (
             f'<!--BLOCK_START:csv-->'
             f'<p style="color:red;">⚠️ Invalid CSV: {e}</p>'
             f'<!--BLOCK_END-->'
         )
-
     raw = df.to_html(index=False, border=1)
     return (
         f'<!--BLOCK_START:csv-->'
@@ -117,8 +111,9 @@ def block_html(block: dict) -> str:
         f'</div><!--BLOCK_END-->'
     )
 
-
-BLOCK_RGX = re.compile(r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S)
+BLOCK_RGX = re.compile(
+    r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S
+)
 
 def html_to_blocks(html: str) -> list[dict]:
     blocks: list[dict] = []
@@ -127,38 +122,45 @@ def html_to_blocks(html: str) -> list[dict]:
         uid = str(uuid.uuid4())
 
         if t == "text":
-            m2 = re.search(r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px.*?>(.*?)</p>', content, re.S)
+            m2 = re.search(
+                r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px.*?>(.*?)</p>',
+                content,
+                re.S,
+            )
             if m2:
                 c, s, txt = m2.groups()
-                blocks.append({"uid":uid,"type":"text","payload":{"text":txt,"color":c,"size":int(s)}})
+                blocks.append(
+                    {"uid": uid, "type": "text", "payload": {"text": txt, "color": c, "size": int(s)}}
+                )
 
         elif t == "youtube":
             src = re.search(r'src="([^"]+)"', content).group(1)
             vid = src.split("/")[-1]
             orig = f"https://www.youtube.com/watch?v={vid}"
-            blocks.append({"uid":uid,"type":"youtube","payload":{"url":orig}})
+            blocks.append({"uid": uid, "type": "youtube", "payload": {"url": orig}})
 
         elif t == "image":
             url = re.search(r'src="([^"]+)"', content).group(1)
-            blocks.append({"uid":uid,"type":"image","payload":{"url":url}})
+            blocks.append({"uid": uid, "type": "image", "payload": {"url": url}})
 
         elif t == "embed":
             url = re.search(r'src="([^"]+)"', content).group(1)
-            blocks.append({"uid":uid,"type":"embed","payload":{"url":url}})
+            blocks.append({"uid": uid, "type": "embed", "payload": {"url": url}})
 
         elif t == "csv":
-            # keep style, blank CSV for re-upload
             m2 = re.search(r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px', content, re.S)
             if m2:
                 c, s = m2.groups()
-                blocks.append({"uid":uid,"type":"csv","payload":{"csv":"","color":c,"size":int(s)}})
+                blocks.append({"uid": uid, "type": "csv", "payload": {"csv": "", "color": c, "size": int(s)}})
 
     return blocks
 
 @st.cache_data(show_spinner=False)
 def load_row(table: str):
     with engine.connect() as conn:
-        return conn.execute(text(f"SELECT id, title, content FROM {table} ORDER BY id LIMIT 1")).fetchone()
+        return conn.execute(
+            text(f"SELECT id, title, content FROM {table} ORDER BY id LIMIT 1")
+        ).fetchone()
 
 def prime_state(table: str):
     if st.session_state.get("table") != table:
@@ -174,13 +176,12 @@ mode = navigation()
 
 if mode == "Table Editor":
     tabledit.main()
-
 else:
     st.sidebar.header("📑 Content Manager")
     chosen = st.sidebar.selectbox("Pick a table", TAB_NAMES)
     prime_state(chosen)
 
-    # Title editor + Update
+    # — Title editor + Update/Delete —
     st.title("✏️ Edit Title")
     c1, c2, c3 = st.columns([3,1,1])
     with c1:
@@ -192,18 +193,36 @@ else:
     raw = st.checkbox("Treat as raw HTML", value=False, key="title_raw_html")
     title_html = title_txt if raw else f'<h2 style="color:{title_color};font-size:{title_size}px;">{title_txt}</h2>'
 
-    if st.button("🔄 Update Title", key="upd-title"):
-        with engine.begin() as conn:
+    col_up, col_del = st.columns([1,1])
+    with col_up:
+        if st.button("🔄 Update Title", key="upd-title"):
+            with engine.begin() as conn:
+                if st.session_state["row_id"]:
+                    conn.execute(
+                        text(f"UPDATE {chosen} SET title=:t WHERE id=:id"),
+                        {"t": title_html, "id": st.session_state["row_id"]},
+                    )
+                else:
+                    conn.execute(
+                        text(f"INSERT INTO {chosen} (title,content) VALUES(:t,'')"),
+                        {"t": title_html},
+                    )
+            st.success("Title updated.")
+            safe_rerun()
+    with col_del:
+        if st.button("🗑️ Delete Title", key="del-title"):
             if st.session_state["row_id"]:
-                conn.execute(text(f"UPDATE {chosen} SET title=:t WHERE id=:id"),
-                             {"t": title_html, "id": st.session_state["row_id"]})
-            else:
-                conn.execute(text(f"INSERT INTO {chosen} (title,content) VALUES(:t,'')"),
-                             {"t": title_html})
-        st.success("Title updated.")
-        safe_rerun()
+                with engine.begin() as conn:
+                    conn.execute(
+                        text(f"UPDATE {chosen} SET title='' WHERE id=:id"),
+                        {"id": st.session_state["row_id"]},
+                    )
+            st.session_state["title_raw"] = ""
+            st.success("Title deleted.")
+            safe_rerun()
 
     st.markdown("---")
+    # — Content Blocks —
     st.subheader("🧩 Content Blocks")
     a1, a2 = st.columns([3,1])
     with a1:
@@ -220,24 +239,44 @@ else:
             )
             st.session_state["blocks"].append({"uid":uid,"type":t,"payload":payload})
 
-    to_delete = None
+    # Render blocks with Edit, Update, Delete
     for idx, blk in enumerate(st.session_state["blocks"]):
         uid = blk["uid"]
         colA, colB, colC, colD = st.columns([5,1,1,1])
         colA.markdown(f"**Block {idx+1} – {blk['type']}**")
 
+        # Edit toggle
         if colB.button("🖉 Edit", key=f"edit-{uid}"):
             st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}", False)
+
+        # Update this block
         if colC.button("🔄 Update", key=f"upd-{uid}"):
-            full_html = "".join(block_html(b) for b in st.session_state["blocks"])
+            new_blocks = st.session_state["blocks"]
+            full = "".join(block_html(b) for b in new_blocks)
             with engine.begin() as conn:
-                conn.execute(text(f"UPDATE {chosen} SET title=:t,content=:c WHERE id=:id"),
-                             {"t": title_html, "c": full_html, "id": st.session_state["row_id"]})
+                conn.execute(
+                    text(f"UPDATE {chosen} SET title=:t,content=:c WHERE id=:id"),
+                    {"t": title_html, "c": full, "id": st.session_state["row_id"]},
+                )
             st.success(f"Block {idx+1} updated.")
             safe_rerun()
-        if colD.button("🗑️ Delete", key=f"del-{uid}"):
-            to_delete = idx
 
+        # Delete this block
+        if colD.button("🗑️ Delete", key=f"del-{uid}"):
+            # Remove from state and DB
+            new_blocks = st.session_state["blocks"][:]
+            new_blocks.pop(idx)
+            full = "".join(block_html(b) for b in new_blocks)
+            with engine.begin() as conn:
+                conn.execute(
+                    text(f"UPDATE {chosen} SET title=:t,content=:c WHERE id=:id"),
+                    {"t": title_html, "c": full, "id": st.session_state["row_id"]},
+                )
+            st.session_state["blocks"] = new_blocks
+            st.success(f"Block {idx+1} deleted.")
+            safe_rerun()
+
+        # Block editor
         with st.expander("", expanded=st.session_state.get(f"exp_{uid}", False)):
             if blk["type"] == "text":
                 blk["payload"]["text"]  = st.text_area("Text", blk["payload"]["text"], key=f"text_{uid}")
@@ -273,22 +312,28 @@ else:
 
         st.markdown("---")
 
-    if to_delete is not None:
-        st.session_state["blocks"].pop(to_delete)
-
+    # — Global Save All —
     if st.button("💾 Save / Update All", key="save-all"):
         full_html = "".join(block_html(b) for b in st.session_state["blocks"])
         with engine.begin() as conn:
             if st.session_state["row_id"]:
-                conn.execute(text(f"UPDATE {chosen} SET title=:t,content=:c WHERE id=:id"),
-                             {"t": title_html, "c": full_html, "id": st.session_state["row_id"]})
+                conn.execute(
+                    text(f"UPDATE {chosen} SET title=:t,content=:c WHERE id=:id"),
+                    {"t": title_html, "c": full_html, "id": st.session_state["row_id"]},
+                )
             else:
-                conn.execute(text(f"INSERT INTO {chosen} (title,content) VALUES(:t,:c)"),
-                             {"t": title_html, "c": full_html})
+                conn.execute(
+                    text(f"INSERT INTO {chosen} (title,content) VALUES(:t,:c)"),
+                    {"t": title_html, "c": full_html},
+                )
         st.success("All changes saved.")
         safe_rerun()
 
+    # — Live Preview —
     st.markdown("---")
     st.subheader("🔍 Live Preview")
     st.markdown(title_html, unsafe_allow_html=True)
-    st.markdown("".join(block_html(b) for b in st.session_state["blocks"]), unsafe_allow_html=True)
+    st.markdown(
+        "".join(block_html(b) for b in st.session_state["blocks"]),
+        unsafe_allow_html=True,
+    )
