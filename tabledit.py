@@ -15,7 +15,7 @@ engine = get_engine()
 TAB_NAMES = ["intro"] + [f"tab{i}" for i in range(1, 51)]
 
 def strip_tags(html: str) -> str:
-    return re.sub(r"<[^>]*>", "", html)
+    return re.sub(r"<[^>]*>", "", html or "")
 
 def main():
     st.subheader("🔧 Table Editor")
@@ -32,7 +32,7 @@ def main():
         return
 
     for row in rows:
-        plain_title = strip_tags(row.title or "")
+        plain_title = strip_tags(row.title)
         st.markdown(f"**Table:** `{table}` — **Row ID:** {row.id}")
         st.markdown(f"**Title:** {plain_title}")
         st.markdown("**Live content preview:**")
