@@ -1,12 +1,8 @@
 # tabledit.py
 import streamlit as st
-import pandas as pd
 from sqlalchemy import create_engine, text
 
-# ──────────────────────────────────────────────────────────────
-# DB connection
-# ──────────────────────────────────────────────────────────────
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def get_engine():
     return create_engine(
         st.secrets["postgres"]["connection_string"],
@@ -15,42 +11,37 @@ def get_engine():
     )
 
 engine = get_engine()
+TAB_NAMES = ["intro"] + [f"tab{i}" for i in range(1, 51)]
 
-# ──────────────────────────────────────────────────────────────
-# Helpers
-# ──────────────────────────────────────────────────────────────
-def list_tables():
-    return ["intro"] + [f"tab{i}" for i in range(1, 51)]
+def main():
+    st.subheader("🔧 Table Editor")
 
-def fetch_rows(table: str) -> pd.DataFrame:
-    df = pd.read_sql(text(f"SELECT * FROM {table} ORDER BY id"), engine)
-    return df
+    table = st.selectbox("Select table to manage", TAB_NAMES)
+    if not table:
+        return
 
-def delete_row(table: str, row_id: int):
-    with engine.begin() as conn:
-        conn.execute(text(f"DELETE FROM {table} WHERE id = :id"), {"id": row_id})
+    # Fetch all rows
+    with engine.connect() as conn:
+        rows = conn.execute(text(f"SELECT id, title, content FROM {table} ORDER BY id")).fetchall()
 
-# ──────────────────────────────────────────────────────────────
-# UI
-# ──────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Table Editor", layout="wide")
-st.title("🗂️ Table Browser & Row Deleter")
+    if not rows:
+        st.info("⚠️ No rows in this table.")
+        return
 
-with st.sidebar:
-    st.header("Manage Tables")
-    if st.button("Show tables"):
-        st.session_state.show = True
-    if st.session_state.get("show"):
-        table = st.selectbox("Select table", list_tables(), key="table_sel")
+    for row in rows:
+        st.markdown(f"**Table:** `{table}` — **Row ID:** {row.id}")
+        st.markdown("**Title (raw HTML):**")
+        st.code(row.title, language="html")
+        st.markdown("**Live content preview:**")
+        st.markdown(row.content, unsafe_allow_html=True)
 
-if st.session_state.get("show"):
-    df = fetch_rows(table)
-    st.subheader(f"Contents of `{table}`")
-    st.dataframe(df)
+        if st.button(f"🗑️ Delete row {row.id}", key=f"del-{table}-{row.id}"):
+            with engine.begin() as conn:
+                conn.execute(text(f"DELETE FROM {table} WHERE id = :id"), {"id": row.id})
+            st.success(f"Deleted row {row.id} from `{table}`.")
+            st.experimental_rerun()
 
-    st.markdown("### Delete a row")
-    delete_id = st.number_input("Row ID to delete", min_value=1, step=1, key="del_id")
-    if st.button(f"🗑️ Delete ID={delete_id}", key="del_btn"):
-        delete_row(table, delete_id)
-        st.success(f"Deleted row {delete_id} from {table}")
-        st.experimental_rerun()
+        st.markdown("---")
+
+if __name__ == "__main__":
+    main()
