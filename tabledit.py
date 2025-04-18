@@ -1,9 +1,8 @@
 # tabledit.py
-import re
 import streamlit as st
 from sqlalchemy import create_engine, text
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource
 def get_engine():
     return create_engine(
         st.secrets["postgres"]["connection_string"],
@@ -14,32 +13,30 @@ def get_engine():
 engine = get_engine()
 TAB_NAMES = ["intro"] + [f"tab{i}" for i in range(1, 51)]
 
-def strip_html_tags(raw: str) -> str:
-    return re.sub(r'<[^>]+>', '', raw)
-
 def main():
     st.subheader("🔧 Table Editor")
-    table = st.selectbox("Select table to manage", TAB_NAMES)
-    if not table:
-        return
-    with engine.connect() as conn:
-        rows = conn.execute(text(f"SELECT id, title, content FROM {table} ORDER BY id")).fetchall()
-    if not rows:
-        st.info("⚠️ No rows in this table.")
-        return
-    for row in rows:
-        st.markdown(f"**Table:** `{table}` — **Row ID:** {row.id}")
-        plain_title = strip_html_tags(row.title)
-        st.markdown("**Title:**")
-        st.write(plain_title)
-        st.markdown("**Live content preview:**")
-        st.markdown(row.content, unsafe_allow_html=True)
-        if st.button(f"🗑️ Delete row {row.id}", key=f"del-{table}-{row.id}"):
-            with engine.begin() as conn2:
-                conn2.execute(text(f"DELETE FROM {table} WHERE id = :id"), {"id": row.id})
-            st.success(f"Deleted row {row.id} from `{table}`.")
-            st.experimental_rerun()
-        st.markdown("---")
+    table = st.selectbox("Select table", TAB_NAMES)
+    rows = engine.connect().execute(
+        text(f"SELECT id, title, content FROM {table} ORDER BY id")
+    ).fetchall()
 
-if __name__ == "__main__":
-    main()
+    if not rows:
+        return st.info("⚠️ No rows in this table.")
+
+    for row in rows:
+        st.markdown(f"**Table:** `{table}` • **Row ID:** {row.id}")
+        # strip HTML for title preview
+        plain = row.title
+        plain = plain.split(">", 1)[-1].rsplit("<", 1)[0]
+        st.write(f"**Title:** {plain}")
+        st.markdown("**Live preview:**")
+        st.markdown(row.content, unsafe_allow_html=True)
+
+        if st.button(f"🗑️ Delete row {row.id}", key=f"del-{table}-{row.id}"):
+            engine.begin().execute(
+                text(f"DELETE FROM {table} WHERE id = :id"), {"id": row.id}
+            )
+            st.success(f"Deleted row {row.id}.")
+            st.experimental_rerun()
+
+        st.markdown("---")
