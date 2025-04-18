@@ -110,13 +110,15 @@ def delete_title_db(chosen: str):
 # ──────────────────────────────────────────────────────────────
 def block_html(block: dict) -> str:
     t, p = block["type"], block["payload"]
+    
     if t == "text":
         return (
             f'<!--BLOCK_START:text-->'
             f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">'
             f'{p["text"]}</p><!--BLOCK_END-->'
         )
-    if t == "youtube":
+    
+    if t == "youtube" and "url" in p:  # Ensure 'url' key exists before processing
         emb = get_youtube_embed(p["url"])
         return (
             f'<!--BLOCK_START:youtube-->'
@@ -124,19 +126,23 @@ def block_html(block: dict) -> str:
             f'allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" '
             f'allowfullscreen></iframe><!--BLOCK_END-->'
         )
-    if t == "image":
+    
+    if t == "image" and "url" in p:  # Ensure 'url' key exists for image block
         url = ensure_https(p["url"])
         return f'<!--BLOCK_START:image--><img src="{url}" style="max-width:100%;"><!--BLOCK_END-->'
-    if t == "rich":
+    
+    if t == "rich" and "content" in p:  # Ensure 'content' key exists for rich text
         return (
             f'<!--BLOCK_START:rich-->'
             f'{p["content"]}<!--BLOCK_END-->'
         )
-    if t == "html":
+    
+    if t == "html" and "content" in p:  # Ensure 'content' key exists for HTML block
         return (
             f'<!--BLOCK_START:html-->'
             f'<pre>{p["content"]}</pre><!--BLOCK_END-->'
         )
+    
     # CSV
     txt = (p.get("csv") or "").strip()
     if not txt:
