@@ -1,6 +1,18 @@
+# modules_intro/tab1.py
 import streamlit as st
+from utils.db import fetch_content
+
+TABLE_NAME = "w1tab2"   # ← the actual table name in Neon
 
 def show():
-    st.header("1.2 You made it! Be prepared for your final project")
-    st.video("https://www.youtube.com/watch?v=fD73oMb4NRg")
+    title_html, content_html = fetch_content(TABLE_NAME)
 
+    if title_html:
+        st.markdown(title_html, unsafe_allow_html=True)
+    else:
+        st.info("No title set yet.")
+
+    if content_html:
+        st.markdown(content_html, unsafe_allow_html=True)
+    else:
+        st.info("No content yet.")
