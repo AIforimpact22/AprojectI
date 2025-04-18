@@ -1,12 +1,12 @@
 # update.py
 from __future__ import annotations
-import re, uuid, json
+import re, uuid, json, urllib.parse
 
 import streamlit as st
 from sqlalchemy import create_engine, text
 
 # ──────────────────────────────────────────────────────────────
-# Safe rerun helper
+# 0. Safe rerun helper
 # ──────────────────────────────────────────────────────────────
 def safe_rerun():
     if hasattr(st, "experimental_rerun"):
@@ -15,7 +15,7 @@ def safe_rerun():
         st.rerun()
 
 # ──────────────────────────────────────────────────────────────
-# Database connection (Neon Postgres)
+# 1. DB connection (Neon)
 # ──────────────────────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
 def get_engine():
@@ -28,7 +28,7 @@ def get_engine():
 engine = get_engine()
 
 # ──────────────────────────────────────────────────────────────
-# Constants
+# 2. Constants
 # ──────────────────────────────────────────────────────────────
 TAB_NAMES = ["intro"] + [f"tab{i}" for i in range(1, 51)]
 BLOCK_TYPES = {
@@ -40,7 +40,7 @@ BLOCK_TYPES = {
 }
 
 # ──────────────────────────────────────────────────────────────
-# Block ↔ HTML serialization
+# 3. Serialization helpers
 # ──────────────────────────────────────────────────────────────
 def block_html(block: dict) -> str:
     t = block["type"]
@@ -49,29 +49,50 @@ def block_html(block: dict) -> str:
     if t == "text":
         return (
             f'<!--BLOCK_START:text-->'
-            f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0;">{p["text"]}</p>'
+            f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">{p["text"]}</p>'
             f'<!--BLOCK_END-->'
         )
+
     if t == "youtube":
-        url = p["url"].replace("watch?v=", "embed/")
+        raw = p["url"].strip()
+        if not raw.startswith("http"):
+            raw = "https://" + raw
+        # extract video ID
+        vid = ""
+        if "youtu.be/" in raw:
+            vid = raw.split("/")[-1]
+        else:
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(raw).query)
+            vid = q.get("v", [""])[0]
+        embed_url = f"https://www.youtube.com/embed/{vid}"
         return (
             f'<!--BLOCK_START:youtube-->'
-            f'<iframe width="560" height="315" src="{url}" frameborder="0" allowfullscreen></iframe>'
+            f'<iframe width="560" height="315" src="{embed_url}" '
+            f'frameborder="0" allowfullscreen></iframe>'
             f'<!--BLOCK_END-->'
         )
+
     if t == "image":
+        raw = p["url"].strip()
+        if not raw.startswith("http"):
+            raw = "https://" + raw
         return (
             f'<!--BLOCK_START:image-->'
-            f'<img src="{p["url"]}" style="max-width:100%;">'
+            f'<img src="{raw}" style="max-width:100%;">'
             f'<!--BLOCK_END-->'
         )
+
     if t == "embed":
+        raw = p["url"].strip()
+        if not raw.startswith("http"):
+            raw = "https://" + raw
         return (
             f'<!--BLOCK_START:embed-->'
-            f'<iframe src="{p["url"]}" style="width:100%;height:420px;border:none;"></iframe>'
+            f'<iframe src="{raw}" style="width:100%;height:420px;border:none;"></iframe>'
             f'<!--BLOCK_END-->'
         )
-    # CSV → wrapped in styled div
+
+    # CSV → styled div
     lines = p["csv"].strip().splitlines()
     headers = lines[0].split(",") if lines else []
     rows = [r.split(",") for r in lines[1:]]
@@ -111,7 +132,10 @@ def html_to_blocks(html: str) -> list[dict]:
                 })
 
         elif t == "youtube":
-            url = re.search(r'src="([^"]+)"', content).group(1).replace("embed/", "watch?v=")
+            # round-trip via video ID
+            src = re.search(r'src="([^"]+)"', content).group(1)
+            vid = src.split("/")[-1]
+            url = f"https://www.youtube.com/watch?v={vid}"
             blocks.append({
                 "uid": str(uuid.uuid4()),
                 "type": "youtube",
@@ -150,7 +174,7 @@ def html_to_blocks(html: str) -> list[dict]:
     return blocks
 
 # ──────────────────────────────────────────────────────────────
-# Load & prime session_state
+# 4. Load & prime session state
 # ──────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def load_row(table: str):
@@ -167,7 +191,7 @@ def prime_state(table: str):
         st.session_state["blocks"]    = html_to_blocks(row.content) if row else []
 
 # ──────────────────────────────────────────────────────────────
-# UI – Sidebar & Title
+# 5. UI – Sidebar & Title
 # ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Tabbed CMS", layout="wide")
 st.title("📑 Tabbed Content Manager")
@@ -178,66 +202,66 @@ with st.sidebar:
 prime_state(chosen)
 
 st.subheader("Title")
-c1, c2, c3 = st.columns([3,1,1])
-with c1:
+col1, col2, col3 = st.columns([3,1,1])
+with col1:
     title_txt = st.text_input("Text", st.session_state["title_raw"], key="title_txt")
-with c2:
+with col2:
     title_color = st.color_picker("Color", "#000000", key="title_color")
-with c3:
+with col3:
     title_size = st.number_input("Size(px)", 8,72,24, key="title_size")
-raw_html = st.checkbox("Treat title as raw HTML", value=False, key="title_raw_html")
+raw_html = st.checkbox("Raw HTML?", value=False, key="title_raw_html")
 
 title_html = title_txt if raw_html else f'<h2 style="color:{title_color};font-size:{title_size}px;">{title_txt}</h2>'
 
 # ──────────────────────────────────────────────────────────────
-# Content Blocks – Add / Edit / Delete
+# 6. Content Blocks – Add / Edit / Delete
 # ──────────────────────────────────────────────────────────────
 st.subheader("Content Blocks")
-a1, a2 = st.columns([3,1])
-with a1:
+add_c, add_btn = st.columns([3,1])
+with add_c:
     new_type = st.selectbox("Add block type…", list(BLOCK_TYPES.keys()), key="new_type")
-with a2:
+with add_btn:
     if st.button("➕ Add Block", key="add"):
         uid = str(uuid.uuid4())
         t = BLOCK_TYPES[new_type]
+        payload = {}
         if t == "text":
-            payload = {"text":"", "color":"#000000", "size":16}
+            payload = {"text": "", "color": "#000000", "size": 16}
         elif t in ("youtube","image","embed"):
-            payload = {"url":""}
-        else:
-            payload = {"csv":"header1,header2\nrow1,row2", "color":"#000000", "size":16}
+            payload = {"url": ""}
+        else:  # csv
+            payload = {"csv": "col1,col2\nval1,val2", "color": "#000000", "size": 16}
         st.session_state["blocks"].append({"uid":uid,"type":t,"payload":payload})
 
 to_delete = None
 for idx, blk in enumerate(st.session_state["blocks"]):
     uid = blk["uid"]
-    colA, colB, colC = st.columns([8,1,1])
-    colA.markdown(f"**Block {idx+1} – {blk['type']}**")
-    if colB.button("✏️ Edit", key=f"edit_{uid}"):
-        st.session_state[f"edit_{uid}"] = not st.session_state.get(f"edit_{uid}", False)
-    if colC.button("🗑️ Delete", key=f"del_{uid}"):
+    cols = st.columns([8,1,1])
+    cols[0].markdown(f"**Block {idx+1} – {blk['type']}**")
+    if cols[1].button("🖉 Edit", key=f"edit_{uid}"):
+        st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}", False)
+    if cols[2].button("🗑️ Delete", key=f"del_{uid}"):
         to_delete = idx
 
-    if st.session_state.get(f"edit_{uid}", False):
-        with st.expander("Edit content", expanded=True):
-            if blk["type"] == "text":
-                blk["payload"]["text"]  = st.text_area("Text", blk["payload"]["text"], key=f"text_{uid}")
-                blk["payload"]["color"] = st.color_picker("Color", blk["payload"]["color"], key=f"col_{uid}")
-                blk["payload"]["size"]  = st.slider("Size(px)", 8,48, blk["payload"]["size"], key=f"size_{uid}")
-            elif blk["type"] in ("youtube","image","embed"):
-                label = "URL" if blk["type"]!="image" else "Image URL"
-                blk["payload"]["url"]   = st.text_input(label, blk["payload"]["url"], key=f"url_{uid}")
-            else:  # csv
-                blk["payload"]["csv"]   = st.text_area("CSV", blk["payload"]["csv"], key=f"csv_{uid}")
-                blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"]["color"], key=f"csv_col_{uid}")
-                blk["payload"]["size"]  = st.slider("Font Size(px)", 8,48, blk["payload"]["size"], key=f"csv_size_{uid}")
-        st.markdown("---")
+    with st.expander("Edit block", expanded=st.session_state.get(f"exp_{uid}", False)):
+        if blk["type"] == "text":
+            blk["payload"]["text"]  = st.text_area("Text", blk["payload"]["text"], key=f"text_{uid}")
+            blk["payload"]["color"] = st.color_picker("Color", blk["payload"]["color"], key=f"col_{uid}")
+            blk["payload"]["size"]  = st.slider("Size(px)", 8,48, blk["payload"]["size"], key=f"size_{uid}")
+        elif blk["type"] in ("youtube","image","embed"):
+            lbl = "Image URL" if blk["type"]=="image" else "URL"
+            blk["payload"]["url"] = st.text_input(lbl, blk["payload"]["url"], key=f"url_{uid}")
+        else:  # csv
+            blk["payload"]["csv"]   = st.text_area("CSV", blk["payload"]["csv"], key=f"csv_{uid}")
+            blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"]["color"], key=f"csv_col_{uid}")
+            blk["payload"]["size"]  = st.slider("Font Size(px)", 8,48, blk["payload"]["size"], key=f"csv_size_{uid}")
+    st.markdown("---")
 
 if to_delete is not None:
     st.session_state["blocks"].pop(to_delete)
 
 # ──────────────────────────────────────────────────────────────
-# Save / Update
+# 7. Save / Update
 # ──────────────────────────────────────────────────────────────
 if st.button("💾 Save / Update", key="save"):
     full_html = "".join(block_html(b) for b in st.session_state["blocks"])
@@ -245,46 +269,20 @@ if st.button("💾 Save / Update", key="save"):
         if st.session_state["row_id"]:
             conn.execute(
                 text(f"UPDATE {chosen} SET title=:t, content=:c WHERE id=:id"),
-                {"t": title_html, "c": full_html, "id": st.session_state["row_id"]}
+                {"t": title_html, "c": full_html, "id": st.session_state["row_id"]},
             )
         else:
             conn.execute(
                 text(f"INSERT INTO {chosen} (title, content) VALUES (:t, :c)"),
-                {"t": title_html, "c": full_html}
+                {"t": title_html, "c": full_html},
             )
     st.success("Saved ✔︎ – refreshing…")
     safe_rerun()
 
 # ──────────────────────────────────────────────────────────────
-# Live Preview
+# 8. Live Preview
 # ──────────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("Live Preview")
-for b in st.session_state["blocks"]:
-    t = b["type"]
-    p = b["payload"]
-    if t == "text":
-        st.markdown(
-            f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0;">{p["text"]}</p>',
-            unsafe_allow_html=True,
-        )
-    elif t == "youtube":
-        url = p["url"]
-        if not url.startswith("http"):
-            url = "https://" + url
-        st.video(url)
-    elif t == "image":
-        url = p["url"]
-        if not url.startswith("http"):
-            url = "https://" + url
-        st.image(url)
-    elif t == "embed":
-        url = p["url"]
-        if not url.startswith("http"):
-            url = "https://" + url
-        st.markdown(
-            f'<iframe src="{url}" style="width:100%;height:420px;border:none;"></iframe>',
-            unsafe_allow_html=True,
-        )
-    elif t == "csv":
-        st.markdown(block_html(b), unsafe_allow_html=True)
+st.markdown(title_html, unsafe_allow_html=True)
+st.markdown("".join(block_html(b) for b in st.session_state["blocks"]), unsafe_allow_html=True)
