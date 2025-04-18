@@ -13,4 +13,4 @@ openpyxl
 psycopg2-binary
 sqlalchemy
 streamlit-quill
-streamlit-ace
+streamlit_ace
