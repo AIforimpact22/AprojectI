@@ -12,7 +12,6 @@ import streamlit as st
       if hasattr(st, "experimental_rerun"):
           st.experimental_rerun()
       elif hasattr(st, "rerun"):
-  @@ -31,94 +34,103 @@
           st.rerun()
       else:
           st.error("Streamlit rerun functionality is not available.")
