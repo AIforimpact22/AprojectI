@@ -12,7 +12,14 @@ def get_engine():
     )
 
 engine = get_engine()
-TAB_NAMES = ["intro"] + [f"tab{i}" for i in range(1, 51)]
+TAB_NAMES = [
+    "introtab1", "introtab2", "introtab3",
+    "w1tab1", "w1tab2", "w1tab3", "w1tab4", "w1tab5", "w1tab6", "w1tab7", "w1tab8", "w1tab9", "w1tab10", "w1tab11",
+    "w2tab1", "w2tab2", "w2tab3", "w2tab4", "w2tab5", "w2tab6", "w2tab7", "w2tab8", "w2tab9", "w2tab10", "w2tab11", "w2tab12",
+    "w3tab1", "w3tab2", "w3tab3", "w3tab4", "w3tab5", "w3tab6", "w3tab7", "w3tab8", "w3tab9", "w3tab10", "w3tab11", "w3tab12",
+    "w4tab1", "w4tab2", "w4tab3", "w4tab4", "w4tab5", "w4tab6", "w4tab7",
+    "w5tab1", "w5tab2", "w5tab3", "w5tab4", "w5tab5", "w5tab6", "w5tab7", "w5tab8"
+]
 
 def strip_tags(html: str) -> str:
     return re.sub(r"<[^>]*>", "", html or "")
