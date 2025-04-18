@@ -1,5 +1,5 @@
 import streamlit as st
- from github_progress import get_user_progress, update_user_progress
+from github_progress import get_user_progress, update_user_progress
   from . import tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11
   import os
   import re
