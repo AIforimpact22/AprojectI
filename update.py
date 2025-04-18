@@ -1,6 +1,6 @@
 # update.py
 """
-Tabbed Content Manager with enhanced CSV→Table support.
+Tabbed Content Manager with robust CSV→Table support.
 """
 
 from __future__ import annotations
@@ -13,9 +13,6 @@ from sqlalchemy import create_engine, text
 from updatesidbare import navigation
 import tabledit
 
-# ──────────────────────────────────────────────────────────────
-# Helpers: rerun, DB, URL & HTML parsing
-# ──────────────────────────────────────────────────────────────
 def safe_rerun():
     if hasattr(st, "experimental_rerun"):
         st.experimental_rerun()
@@ -60,8 +57,9 @@ def get_youtube_embed(raw_url: str) -> str:
     return f"https://www.youtube-nocookie.com/embed/{vid}"
 
 def block_html(block: dict) -> str:
-    t = block["type"]
+    t   = block["type"]
     pld = block["payload"]
+
     if t == "text":
         return (
             f'<!--BLOCK_START:text-->'
@@ -69,6 +67,7 @@ def block_html(block: dict) -> str:
             f'{pld["text"]}</p>'
             f'<!--BLOCK_END-->'
         )
+
     if t == "youtube":
         emb = get_youtube_embed(pld["url"])
         return (
@@ -78,6 +77,7 @@ def block_html(block: dict) -> str:
             f'allowfullscreen></iframe>'
             f'<!--BLOCK_END-->'
         )
+
     if t == "image":
         url = ensure_https(pld["url"])
         return (
@@ -85,6 +85,7 @@ def block_html(block: dict) -> str:
             f'<img src="{url}" style="max-width:100%;">'
             f'<!--BLOCK_END-->'
         )
+
     if t == "embed":
         url = ensure_https(pld["url"])
         return (
@@ -92,8 +93,22 @@ def block_html(block: dict) -> str:
             f'<iframe src="{url}" style="width:100%;height:420px;border:none;"></iframe>'
             f'<!--BLOCK_END-->'
         )
-    # CSV → render DataFrame.to_html inside styled div
-    df = pd.read_csv(io.StringIO(pld["csv"]))
+
+    # CSV: guard against empty or invalid data
+    csv_text = (pld.get("csv") or "").strip()
+    if not csv_text:
+        return ""  # nothing to show
+
+    try:
+        df = pd.read_csv(io.StringIO(csv_text))
+    except Exception as e:
+        # render an error message inline
+        return (
+            f'<!--BLOCK_START:csv-->'
+            f'<p style="color:red;">⚠️ Invalid CSV: {e}</p>'
+            f'<!--BLOCK_END-->'
+        )
+
     raw = df.to_html(index=False, border=1)
     return (
         f'<!--BLOCK_START:csv-->'
@@ -101,6 +116,7 @@ def block_html(block: dict) -> str:
         f'{raw}'
         f'</div><!--BLOCK_END-->'
     )
+
 
 BLOCK_RGX = re.compile(r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S)
 
@@ -131,7 +147,7 @@ def html_to_blocks(html: str) -> list[dict]:
             blocks.append({"uid":uid,"type":"embed","payload":{"url":url}})
 
         elif t == "csv":
-            # only retrieve style; CSV text left blank for re-upload
+            # keep style, blank CSV for re-upload
             m2 = re.search(r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px', content, re.S)
             if m2:
                 c, s = m2.groups()
@@ -149,25 +165,22 @@ def prime_state(table: str):
         row = load_row(table)
         st.session_state["table"]     = table
         st.session_state["row_id"]    = row.id if row else None
-        # strip HTML tags for title input
         st.session_state["title_raw"] = re.sub(r"<[^>]*>", "", row.title) if row else ""
         st.session_state["blocks"]    = html_to_blocks(row.content) if row else []
 
-# ──────────────────────────────────────────────────────────────
-# Main
 # ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Tabbed CMS", layout="wide")
 mode = navigation()
 
 if mode == "Table Editor":
     tabledit.main()
+
 else:
-    # Sidebar – select table
     st.sidebar.header("📑 Content Manager")
     chosen = st.sidebar.selectbox("Pick a table", TAB_NAMES)
     prime_state(chosen)
 
-    # Title editor + update
+    # Title editor + Update
     st.title("✏️ Edit Title")
     c1, c2, c3 = st.columns([3,1,1])
     with c1:
@@ -185,14 +198,12 @@ else:
                 conn.execute(text(f"UPDATE {chosen} SET title=:t WHERE id=:id"),
                              {"t": title_html, "id": st.session_state["row_id"]})
             else:
-                # insert fresh row
                 conn.execute(text(f"INSERT INTO {chosen} (title,content) VALUES(:t,'')"),
                              {"t": title_html})
         st.success("Title updated.")
         safe_rerun()
 
     st.markdown("---")
-    # Block editor
     st.subheader("🧩 Content Blocks")
     a1, a2 = st.columns([3,1])
     with a1:
@@ -201,10 +212,12 @@ else:
         if st.button("➕ Add Block", key="add"):
             uid = str(uuid.uuid4())
             t   = BLOCK_TYPES[new_type]
-            payload = ({"text":"","color":"#000000","size":16}
-                       if t=="text"
-                       else {"url":""} if t in ("youtube","image","embed")
-                       else {"csv":"","color":"#000000","size":16})
+            payload = (
+                {"text":"","color":"#000000","size":16}
+                if t=="text"
+                else {"url":""} if t in ("youtube","image","embed")
+                else {"csv":"","color":"#000000","size":16}
+            )
             st.session_state["blocks"].append({"uid":uid,"type":t,"payload":payload})
 
     to_delete = None
@@ -216,10 +229,10 @@ else:
         if colB.button("🖉 Edit", key=f"edit-{uid}"):
             st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}", False)
         if colC.button("🔄 Update", key=f"upd-{uid}"):
-            full = "".join(block_html(b) for b in st.session_state["blocks"])
+            full_html = "".join(block_html(b) for b in st.session_state["blocks"])
             with engine.begin() as conn:
                 conn.execute(text(f"UPDATE {chosen} SET title=:t,content=:c WHERE id=:id"),
-                             {"t": title_html, "c": full, "id": st.session_state["row_id"]})
+                             {"t": title_html, "c": full_html, "id": st.session_state["row_id"]})
             st.success(f"Block {idx+1} updated.")
             safe_rerun()
         if colD.button("🗑️ Delete", key=f"del-{uid}"):
@@ -263,7 +276,6 @@ else:
     if to_delete is not None:
         st.session_state["blocks"].pop(to_delete)
 
-    # Global save
     if st.button("💾 Save / Update All", key="save-all"):
         full_html = "".join(block_html(b) for b in st.session_state["blocks"])
         with engine.begin() as conn:
@@ -276,7 +288,6 @@ else:
         st.success("All changes saved.")
         safe_rerun()
 
-    # Live Preview
     st.markdown("---")
     st.subheader("🔍 Live Preview")
     st.markdown(title_html, unsafe_allow_html=True)
