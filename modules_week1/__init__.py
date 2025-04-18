@@ -12,7 +12,25 @@ import streamlit as st
      if hasattr(st, "experimental_rerun"):
          st.experimental_rerun()
      elif hasattr(st, "rerun"):
- @@ -31,94 +34,103 @@
+         st.rerun()
+     else:
+         st.error("Streamlit rerun functionality is not available.")
+ 
+ def parse_tab_title(title):
+     """
+     Extracts a numeric tuple from the beginning of the title.
+     E.g., "1.1 Introduction to Python" -> (1, 1)
+           "1.1.1 Advanced" -> (1, 1, 1)
+     """
+     m = re.match(r"(\d+(?:\.\d+)*)(.*)", title)
+     if m:
+         numbers = m.group(1)
+         try:
+             parts = tuple(map(int, numbers.split(".")))
+         except Exception:
+             parts = (0,)
+         return parts
+     return (0,)
  
  def load_update_tabs():
      """
