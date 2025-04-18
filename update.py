@@ -29,7 +29,9 @@ def get_engine():
 engine = get_engine()
 
 TAB_NAMES   = [
-    "intro",
+    "introtab1",
+    "introtab2",
+    "introtab3",
     # Week 1
     "w1tab1","w1tab2","w1tab3","w1tab4","w1tab5","w1tab6","w1tab7","w1tab8","w1tab9","w1tab10","w1tab11",
     # Week 2
