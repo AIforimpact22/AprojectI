@@ -15,42 +15,30 @@ engine = get_engine()
 TAB_NAMES = ["intro"] + [f"tab{i}" for i in range(1, 51)]
 
 def strip_html_tags(raw: str) -> str:
-    # remove all HTML tags
     return re.sub(r'<[^>]+>', '', raw)
-
 
 def main():
     st.subheader("🔧 Table Editor")
-
     table = st.selectbox("Select table to manage", TAB_NAMES)
     if not table:
         return
-
-    # Fetch all rows
     with engine.connect() as conn:
         rows = conn.execute(text(f"SELECT id, title, content FROM {table} ORDER BY id")).fetchall()
-
     if not rows:
         st.info("⚠️ No rows in this table.")
         return
-
     for row in rows:
         st.markdown(f"**Table:** `{table}` — **Row ID:** {row.id}")
-
-        # Show plain title without HTML
         plain_title = strip_html_tags(row.title)
         st.markdown("**Title:**")
         st.write(plain_title)
-
         st.markdown("**Live content preview:**")
         st.markdown(row.content, unsafe_allow_html=True)
-
         if st.button(f"🗑️ Delete row {row.id}", key=f"del-{table}-{row.id}"):
-            with engine.begin() as conn:
-                conn.execute(text(f"DELETE FROM {table} WHERE id = :id"), {"id": row.id})
+            with engine.begin() as conn2:
+                conn2.execute(text(f"DELETE FROM {table} WHERE id = :id"), {"id": row.id})
             st.success(f"Deleted row {row.id} from `{table}`.")
             st.experimental_rerun()
-
         st.markdown("---")
 
 if __name__ == "__main__":
