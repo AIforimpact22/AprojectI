@@ -15,7 +15,6 @@ engine = get_engine()
 TAB_NAMES = ["intro"] + [f"tab{i}" for i in range(1, 51)]
 
 def strip_html_tags(raw: str) -> str:
-    # remove all HTML tags
     return re.sub(r'<[^>]+>', '', raw)
 
 
@@ -26,7 +25,6 @@ def main():
     if not table:
         return
 
-    # Fetch all rows
     with engine.connect() as conn:
         rows = conn.execute(text(f"SELECT id, title, content FROM {table} ORDER BY id")).fetchall()
 
@@ -36,12 +34,9 @@ def main():
 
     for row in rows:
         st.markdown(f"**Table:** `{table}` — **Row ID:** {row.id}")
-
-        # Show plain title without HTML
         plain = strip_html_tags(row.title)
         st.markdown("**Title:**")
         st.write(plain)
-
         st.markdown("**Live content preview:**")
         st.markdown(row.content, unsafe_allow_html=True)
 
