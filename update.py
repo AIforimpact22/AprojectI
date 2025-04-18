@@ -2,7 +2,7 @@ import streamlit as st
 from sqlalchemy import create_engine, text
 
 # ──────────────────────────────────────────────────────────────
-# 1. DB connection (taken from .streamlit/secrets.toml)
+# 1. DATABASE POOL
 # ──────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_engine():
@@ -15,150 +15,143 @@ def get_engine():
 engine = get_engine()
 
 # ──────────────────────────────────────────────────────────────
-# 2. Page + sidebar
+# 2. PAGE ‑ BASICS
 # ──────────────────────────────────────────────────────────────
-st.set_page_config("Tabbed CMS", layout="wide")
-st.title("📑 Tabbed Content Manager (multi‑segment)")
+st.set_page_config(page_title="Tabbed CMS", layout="wide")
+st.title("📑 Tabbed Content Manager")
 
 TAB_NAMES = ["intro"] + [f"tab{i}" for i in range(1, 51)]
+
 with st.sidebar:
     st.header("Select section")
     selected_tab = st.selectbox("Choose a table", TAB_NAMES)
 
 # ──────────────────────────────────────────────────────────────
-# 3. Load or initialise title + segments for this tab
+# 3. LOAD EXISTING RECORD (id = 1)
 # ──────────────────────────────────────────────────────────────
-def fetch_row(table):
-    q = text(f"SELECT id, title, content FROM {table} ORDER BY id LIMIT 1")
-    with engine.connect() as c:
-        return c.execute(q).fetchone()
+@st.cache_data(show_spinner=False)
+def fetch_row(tab: str):
+    with engine.connect() as cn:
+        r = cn.execute(
+            text(f"SELECT id, title, content FROM {tab} ORDER BY id LIMIT 1")
+        ).fetchone()
+    return r
 
 row = fetch_row(selected_tab)
-if "current_tab" not in st.session_state or st.session_state.current_tab != selected_tab:
-    st.session_state.current_tab = selected_tab
-    st.session_state.row_id = row.id if row else None
-    st.session_state.title_raw = (
-        row.title if row else ""
-    )  # raw HTML already stored
-    st.session_state.segments = [row.content] if (row and row.content) else []
+row_id = row.id if row else None
+initial_title = row.title if row else ""
+initial_content = row.content if row else ""
 
 # ──────────────────────────────────────────────────────────────
-# 4. TITLE editor
+# 4. SESSION STATE FOR MULTI‑BLOCK CONTENT
+# ──────────────────────────────────────────────────────────────
+if "loaded_tab" not in st.session_state or st.session_state.loaded_tab != selected_tab:
+    # First visit or tab switch → initialise
+    st.session_state.loaded_tab = selected_tab
+    st.session_state.content_blocks = (
+        [initial_content] if initial_content else []
+    )
+
+# ──────────────────────────────────────────────────────────────
+# 5. TITLE EDITOR
 # ──────────────────────────────────────────────────────────────
 st.subheader("Title")
-col1, col2 = st.columns([3, 1])
-with col1:
-    title_text = st.text_input("Text", st.session_state.title_raw, key="title_input")
-with col2:
-    title_color = st.color_picker("Color", "#000000")
-title_size = st.slider("Font size (px)", 8, 48, 18)
-is_html = st.toggle("Interpret title as raw HTML", False)
+tl, tr = st.columns([3, 1])
+with tl:
+    title_text = st.text_input("Text", value=initial_title, key="title_text")
+with tr:
+    title_color = st.color_picker("Color", "#000000", key="title_color")
+title_size = st.slider("Font size (px)", 8, 48, 18, key="title_size")
+title_is_html = st.toggle("Interpret title as raw HTML?", value=False)
+
 stored_title = (
     title_text
-    if is_html
+    if title_is_html
     else f'<span style="color:{title_color};font-size:{title_size}px;">{title_text}</span>'
 )
 
 # ──────────────────────────────────────────────────────────────
-# 5. ADD‑SEGMENT UI
+# 6. BLOCK‑BY‑BLOCK CONTENT BUILDER
 # ──────────────────────────────────────────────────────────────
-st.divider()
-st.subheader("➕ Add a content segment")
+st.subheader("➕ Add a new content block")
 
-c_type = st.selectbox(
-    "Segment type",
-    ["Plain text", "Rich text / HTML", "YouTube URL", "Embed URL", "CSV → Table"],
-)
+with st.form("block_form", clear_on_submit=True):
+    block_type = st.selectbox(
+        "Block type",
+        ["Plain text / HTML", "YouTube URL", "Embed URL", "CSV → Table"],
+    )
 
-def make_segment_html():
-    if c_type == "Plain text":
-        txt = st.text_area("Text", height=120, key="plain")
-        return f"<p>{txt}</p>"
-
-    if c_type == "Rich text / HTML":
-        raw = st.text_area("Markdown / raw HTML", height=180, key="rich")
-        color = st.color_picker("Text color", "#000000", key="c1")
-        size = st.slider("Font size (px)", 8, 48, 16, key="c2")
-        return f'<div style="color:{color};font-size:{size}px;">{raw}</div>'
-
-    if c_type == "YouTube URL":
-        url = st.text_input("https://…", key="yt")
-        return (
-            f'<iframe width="560" height="315" src="{url.replace("watch?v=", "embed/")}"'
-            ' frameborder="0" allowfullscreen></iframe>'
+    # DYNAMIC INPUTS -----------------------------------------------------------
+    if block_type == "Plain text / HTML":
+        txt = st.text_area("Markdown / HTML", height=150)
+        txt_color = st.color_picker("Text color", "#000000")
+        txt_size = st.slider("Font size (px)", 8, 48, 16)
+        snippet = (
+            f'<div style="color:{txt_color};font-size:{txt_size}px;">{txt}</div>'
         )
 
-    if c_type == "Embed URL":
-        url = st.text_input("Embeddable URL", key="em")
-        h = st.number_input("Height (px)", 200, 1000, 400, key="emh")
-        return f'<iframe src="{url}" style="width:100%;height:{h}px;border:none;"></iframe>'
+    elif block_type == "YouTube URL":
+        yt = st.text_input("Paste a full YouTube URL (https://…)")
+        embed = yt.replace("watch?v=", "embed/")
+        snippet = f'<iframe width="560" height="315" src="{embed}" frameborder="0" allowfullscreen></iframe>'
 
-    # CSV -> HTML table
-    csv_text = st.text_area("Paste CSV (first row = headings)", height=200, key="csv")
-    rows = [r.split(",") for r in csv_text.strip().splitlines() if r.strip()]
-    if not rows:
-        return ""
-    head, data = rows[0], rows[1:]
-    html = (
-        "<table><thead><tr>"
-        + "".join(f"<th>{h}</th>" for h in head)
-        + "</tr></thead><tbody>"
-    )
-    for r in data:
-        html += "<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>"
-    html += "</tbody></table>"
-    return html
+    elif block_type == "Embed URL":
+        url = st.text_input("Any embeddable URL (maps, video, chart…)")
+        snippet = f'<iframe src="{url}" style="width:100%;height:400px;border:none;"></iframe>'
 
-segment_html = make_segment_html()
+    else:  # CSV → Table
+        csv_raw = st.text_area("Paste CSV (first row = headers)", height=150)
+        rows = [r.split(",") for r in csv_raw.strip().splitlines() if r.strip()]
+        if rows:
+            hdr, data = rows[0], rows[1:]
+            table = "<table><thead><tr>" + "".join(
+                f"<th>{h}</th>" for h in hdr
+            ) + "</tr></thead><tbody>"
+            for r in data:
+                table += "<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>"
+            table += "</tbody></table>"
+            snippet = table
+        else:
+            snippet = ""
 
-if st.button("➕ Add segment"):
-    if segment_html.strip():
-        st.session_state.segments.append(segment_html)
-        st.success("Segment added!")
+    # SUBMIT BUTTON ------------------------------------------------------------
+    add_it = st.form_submit_button("Add block ➜")
+    if add_it and snippet:
+        st.session_state.content_blocks.append(snippet)
+        st.success("Block added!")
 
-# ──────────────────────────────────────────────────────────────
-# 6. Segment list with delete + drag‑to‑reorder (Streamlit‑sortable‑elements)
-# ──────────────────────────────────────────────────────────────
-st.divider()
-st.subheader("Current segments")
-if st.session_state.segments:
-    # simple delete buttons
-    for idx, seg in enumerate(st.session_state.segments):
-        colA, colB = st.columns([9, 1])
-        with colA:
-            st.markdown(seg, unsafe_allow_html=True)
-        with colB:
-            if st.button("🗑️", key=f"del{idx}"):
-                st.session_state.segments.pop(idx)
-                st.experimental_rerun()
-else:
-    st.info("No segments yet. Add one above!")
+# OPTION TO CLEAR ALL BLOCKS ---------------------------------------------------
+if st.button("🗑️ Clear ALL blocks"):
+    st.session_state.content_blocks = []
 
 # ──────────────────────────────────────────────────────────────
-# 7. SAVE
+# 7. LIVE PREVIEW OF COMBINED CONTENT
 # ──────────────────────────────────────────────────────────────
-full_content = "".join(st.session_state.segments)
-st.divider()
-if st.button("💾 Save to database"):
-    with engine.begin() as conn:
-        if st.session_state.row_id:  # UPDATE
-            q = text(
-                f"UPDATE {selected_tab} SET title=:t, content=:c WHERE id=:id"
-            )
-            conn.execute(
-                q,
-                {"t": stored_title, "c": full_content, "id": st.session_state.row_id},
-            )
-        else:  # INSERT
-            q = text(f"INSERT INTO {selected_tab} (title, content) VALUES (:t, :c)")
-            conn.execute(q, {"t": stored_title, "c": full_content})
-    st.success("Saved – reloading.")
-    st.experimental_rerun()
+combined_content = "\n".join(st.session_state.content_blocks)
 
-# ──────────────────────────────────────────────────────────────
-# 8. LIVE PREVIEW
-# ──────────────────────────────────────────────────────────────
 st.divider()
 st.subheader("Live preview")
 st.markdown(stored_title, unsafe_allow_html=True)
-st.markdown(full_content, unsafe_allow_html=True)
+st.markdown(combined_content, unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────────────────────
+# 8. SAVE / UPDATE TO DATABASE
+# ──────────────────────────────────────────────────────────────
+if st.button("💾 Save to database"):
+    with engine.begin() as cn:
+        if row_id:
+            cn.execute(
+                text(
+                    f"UPDATE {selected_tab} SET title=:ti, content=:co WHERE id=:id"
+                ),
+                {"ti": stored_title, "co": combined_content, "id": row_id},
+            )
+        else:
+            cn.execute(
+                text(
+                    f"INSERT INTO {selected_tab} (title, content) VALUES (:ti, :co)"
+                ),
+                {"ti": stored_title, "co": combined_content},
+            )
+    st.success("Saved! Reloading…")
+    st.experimental_rerun()
