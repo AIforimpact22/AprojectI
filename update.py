@@ -39,7 +39,6 @@ BLOCK_TYPES = {
     "Text":        "text",
     "YouTube URL": "youtube",
     "Image URL":   "image",
-    "Embed URL":   "embed",
     "CSV → Table": "csv",
     "Text/Rich":   "rich",  # New type for rich text editor
     "Text/HTML":   "html",  # New type for HTML editor
@@ -128,12 +127,6 @@ def block_html(block: dict) -> str:
     if t == "image":
         url = ensure_https(p["url"])
         return f'<!--BLOCK_START:image--><img src="{url}" style="max-width:100%;"><!--BLOCK_END-->'
-    if t == "embed":
-        url = ensure_https(p["url"])
-        return (
-            f'<!--BLOCK_START:embed-->'
-            f'<iframe src="{url}" style="width:100%;height:420px;border:none;"></iframe><!--BLOCK_END-->'
-        )
     if t == "rich":
         return (
             f'<!--BLOCK_START:rich-->'
@@ -179,9 +172,6 @@ def html_to_blocks(html: str) -> list[dict]:
         elif t == "image":
             url = re.search(r'src="([^"]+)"', content).group(1)
             blocks.append({"uid":uid,"type":"image","payload":{"url":url}})
-        elif t == "embed":
-            url = re.search(r'src="([^"]+)"', content).group(1)
-            blocks.append({"uid":uid,"type":"embed","payload":{"url":url}})
         elif t == "csv":
             m2 = re.search(r'font-size:(\d+)px', content, re.S)
             c = re.search(r'color:(#[0-9A-Fa-f]{6})', content, re.S).group(1) if "color" in content else "#000"
