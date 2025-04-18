@@ -1,80 +1,123 @@
-# update.py
-import os
 import streamlit as st
-import psycopg2
-from psycopg2 import sql
+from sqlalchemy import create_engine, text
+from urllib.parse import quote_plus
 
-# ——————————————————————————————————————————
-# 1) Connection helper (single secret: db_url)
-@st.cache_resource
-def get_connection():
-    # Try secret first, then env var
-    db_url = st.secrets.get("db_url") or os.getenv("DB_URL")
-    if not db_url:
-        st.error(
-            "❌ No database URL found.\n\n"
-            "Please set `db_url` in your Streamlit secrets or the DB_URL env var."
-        )
-        st.stop()
-    return psycopg2.connect(db_url)
+# ──────────────────────────────────────────────────────────────
+# 1. Database connection
+#    The connection string lives in .streamlit/secrets.toml
+# ──────────────────────────────────────────────────────────────
+@st.cache_resource  # keeps the pool warm across reruns
+def get_engine():
+    conn_str = st.secrets["postgres"]["connection_string"]
+    return create_engine(conn_str, pool_pre_ping=True, isolation_level="AUTOCOMMIT")
 
-# ——————————————————————————————————————————
-# 2) Discover modules & tabs
-def get_modules(conn):
-    cur = conn.cursor()
-    # all schemas named modules_weekX
-    cur.execute("""
-      SELECT nspname
-        FROM pg_namespace
-       WHERE nspname LIKE 'modules_week%';
-    """)
-    schemas = [row[0] for row in cur.fetchall()]
-    modules = {"intro": []}
-    for schema in schemas:
-        week = schema.split("_")[-1]
-        cur.execute(
-          "SELECT tablename FROM pg_tables WHERE schemaname = %s ORDER BY tablename;",
-          (schema,)
-        )
-        modules[week] = [r[0] for r in cur.fetchall()]
-    cur.close()
-    return modules
+engine = get_engine()
 
-# ——————————————————————————————————————————
-# 3) Fetch rows from one table
-def fetch_content(conn, schema, table):
-    cur = conn.cursor()
-    q = sql.SQL("SELECT title, video_url, content FROM {}.{};")\
-         .format(sql.Identifier(schema), sql.Identifier(table))
-    cur.execute(q)
-    rows = cur.fetchall()
-    cur.close()
-    return rows
+# ──────────────────────────────────────────────────────────────
+# 2. Page setup
+# ──────────────────────────────────────────────────────────────
+st.set_page_config(page_title="Tabbed CMS", layout="wide")
+st.title("📑 Tabbed Content Manager")
 
-# ——————————————————————————————————————————
-# 4) Render each row: title, video, markdown/HTML
-def render(rows):
-    for title, video_url, content in rows:
-        st.markdown(f"## {title}")
-        if video_url:
-            st.video(video_url)
-        st.markdown(content, unsafe_allow_html=True)
+# All 51 table names
+TAB_NAMES = ["intro"] + [f"tab{i}" for i in range(1, 51)]
 
-# ——————————————————————————————————————————
-# 5) Main
-def main():
-    st.set_page_config(page_title="Course Content", layout="wide")
-    conn    = get_connection()
-    modules = get_modules(conn)
+with st.sidebar:
+    st.header("Select section")
+    selected_tab = st.selectbox("Choose a table", TAB_NAMES)
 
-    choice = st.sidebar.selectbox("Module", list(modules.keys()))
-    if choice == "intro":
-        rows = fetch_content(conn, "public", "modules_intro")
-    else:
-        tab  = st.sidebar.selectbox("Tab", modules[choice])
-        rows = fetch_content(conn, f"modules_{choice}", tab)
+# ──────────────────────────────────────────────────────────────
+# 3. Fetch existing row (we treat row id=1 as “current content”)
+# ──────────────────────────────────────────────────────────────
+def get_current_row(table: str):
+    query = text(f"SELECT id, title, content FROM {table} ORDER BY id LIMIT 1")
+    with engine.connect() as conn:
+        row = conn.execute(query).fetchone()
+    return row
 
-    render(rows)
+row = get_current_row(selected_tab)
+current_title  = row.title   if row else ""
+current_html   = row.content if row else ""
+row_id         = row.id if row else None
 
-if __name__ == "__main__":
-    main()
+# ──────────────────────────────────────────────────────────────
+# 4. UI – Title block
+# ──────────────────────────────────────────────────────────────
+st.subheader("Title")
+col1, col2 = st.columns([3, 1])
+with col1:
+    title_text = st.text_input("Text", value=current_title)
+with col2:
+    t_color = st.color_picker("Color", "#000000")
+t_size   = st.slider("Font size (px)", 8, 48, 18)
+t_is_html = st.toggle("Interpret title as raw HTML?", value=False)
+
+# Build the stored title value
+if t_is_html:
+    stored_title = title_text  # take verbatim
+else:
+    stored_title = f'<span style="color:{t_color};font-size:{t_size}px;">{title_text}</span>'
+
+# ──────────────────────────────────────────────────────────────
+# 5. UI – Content block
+# ──────────────────────────────────────────────────────────────
+st.subheader("Content")
+c_type = st.selectbox(
+    "Content type",
+    ["Rich text / HTML", "YouTube URL", "Embed URL", "CSV → Table"],
+    index=0,
+)
+
+if c_type == "Rich text / HTML":
+    content_raw = st.text_area("Markdown / HTML", value=current_html, height=200)
+    c_color = st.color_picker("Text color", "#000000")
+    c_size  = st.slider("Font size (px)", 8, 48, 16, key="csize")
+    stored_content = (
+        f'<div style="color:{c_color};font-size:{c_size}px;">{content_raw}</div>'
+    )
+
+elif c_type == "YouTube URL":
+    yt_url = st.text_input("YouTube full URL (https://…)", value="")
+    stored_content = f'<iframe width="560" height="315" src="{yt_url.replace("watch?v=", "embed/")}" frameborder="0" allowfullscreen></iframe>'
+
+elif c_type == "Embed URL":
+    em_url = st.text_input("Any embeddable URL (maps, another video…)", value="")
+    stored_content = f'<iframe src="{em_url}" style="width:100%;height:400px;border:none;"></iframe>'
+
+else:  # CSV → Table
+    csv_text = st.text_area("Paste CSV (first line = headers)", height=200)
+    rows = [r.split(",") for r in csv_text.strip().splitlines() if r.strip()]
+    headers, data = rows[0], rows[1:]
+    table_html = "<table><thead><tr>" + "".join(
+        f"<th>{h}</th>" for h in headers
+    ) + "</tr></thead><tbody>"
+    for r in data:
+        table_html += "<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>"
+    table_html += "</tbody></table>"
+    stored_content = table_html
+
+# ──────────────────────────────────────────────────────────────
+# 6. Save / Update
+# ──────────────────────────────────────────────────────────────
+if st.button("💾 Save to database"):
+    with engine.begin() as conn:
+        if row_id:  # update
+            q = text(
+                f"UPDATE {selected_tab} SET title=:title, content=:content WHERE id=:id"
+            )
+            conn.execute(q, {"title": stored_title, "content": stored_content, "id": row_id})
+        else:       # insert
+            q = text(
+                f"INSERT INTO {selected_tab} (title, content) VALUES (:title, :content)"
+            )
+            conn.execute(q, {"title": stored_title, "content": stored_content})
+    st.success("Saved!  ↻  Page will refresh.")
+    st.experimental_rerun()
+
+# ──────────────────────────────────────────────────────────────
+# 7. Live preview
+# ──────────────────────────────────────────────────────────────
+st.divider()
+st.subheader("Live preview")
+st.markdown(stored_title, unsafe_allow_html=True)
+st.markdown(stored_content, unsafe_allow_html=True)
