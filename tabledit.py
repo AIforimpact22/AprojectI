@@ -1,4 +1,5 @@
 # tabledit.py
+import re
 import streamlit as st
 from sqlalchemy import create_engine, text
 
@@ -12,6 +13,11 @@ def get_engine():
 
 engine = get_engine()
 TAB_NAMES = ["intro"] + [f"tab{i}" for i in range(1, 51)]
+
+def strip_html_tags(raw: str) -> str:
+    # remove all HTML tags
+    return re.sub(r'<[^>]+>', '', raw)
+
 
 def main():
     st.subheader("🔧 Table Editor")
@@ -30,8 +36,12 @@ def main():
 
     for row in rows:
         st.markdown(f"**Table:** `{table}` — **Row ID:** {row.id}")
-        st.markdown("**Title (raw HTML):**")
-        st.code(row.title, language="html")
+
+        # Show plain title without HTML
+        plain = strip_html_tags(row.title)
+        st.markdown("**Title:**")
+        st.write(plain)
+
         st.markdown("**Live content preview:**")
         st.markdown(row.content, unsafe_allow_html=True)
 
