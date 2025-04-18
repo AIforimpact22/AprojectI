@@ -39,9 +39,9 @@ TAB_NAMES   = [
     "w5tab1","w5tab2","w5tab3","w5tab4","w5tab5","w5tab6","w5tab7","w5tab8",
 ]
 BLOCK_TYPES = {
-    "Text":       "text",
-    "Text/Rich":  "text_rich",
-    "Text/HTML":  "text_html",
+    "Text":        "text",
+    "Text/Rich":   "textrich",
+    "Text/HTML":   "texthtml",
     "YouTube URL": "youtube",
     "Image URL":   "image",
     "Embed URL":   "embed",
@@ -120,16 +120,16 @@ def block_html(block: dict) -> str:
             f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">'
             f'{p["text"]}</p><!--BLOCK_END-->'
         )
-    if t == "text_rich":
+    if t == "textrich":
         return (
-            f'<!--BLOCK_START:text_rich-->'
-            f'{p["rich_text"]}'
+            f'<!--BLOCK_START:textrich-->'
+            f'{p["rich_content"]}'
             f'<!--BLOCK_END-->'
         )
-    if t == "text_html":
+    if t == "texthtml":
         return (
-            f'<!--BLOCK_START:text_html-->'
-            f'{p["html"]}'
+            f'<!--BLOCK_START:texthtml-->'
+            f'{p["html_content"]}'
             f'<!--BLOCK_END-->'
         )
     if t == "youtube":
@@ -164,7 +164,7 @@ def block_html(block: dict) -> str:
         f'{raw}</div><!--BLOCK_END-->'
     )
 
-BLOCK_RGX = re.compile(r"<!--BLOCK_START:(?P<type>[a-z_]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S)
+BLOCK_RGX = re.compile(r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S)
 
 def html_to_blocks(html: str) -> list[dict]:
     blocks = []
@@ -176,10 +176,10 @@ def html_to_blocks(html: str) -> list[dict]:
             if m2:
                 c, s, txt = m2.groups()
                 blocks.append({"uid":uid,"type":"text","payload":{"text":txt,"color":c,"size":int(s)}})
-        elif t == "text_rich":
-            blocks.append({"uid":uid,"type":"text_rich","payload":{"rich_text":content}})
-        elif t == "text_html":
-            blocks.append({"uid":uid,"type":"text_html","payload":{"html":content}})
+        elif t == "textrich":
+            blocks.append({"uid":uid,"type":"textrich","payload":{"rich_content":content}})
+        elif t == "texthtml":
+            blocks.append({"uid":uid,"type":"texthtml","payload":{"html_content":content}})
         elif t == "youtube":
             src = re.search(r'src="([^"]+)"', content).group(1)
             vid = src.split("/")[-1]
@@ -210,76 +210,62 @@ def prime_state(table: str):
         st.session_state["blocks"]    = html_to_blocks(row.content) if row else []
 
 # ──────────────────────────────────────────────────────────────
-# Rich Text Editor components
+# Rich Text Editor Component
 # ──────────────────────────────────────────────────────────────
-def rich_text_editor(value, key_prefix):
-    """Creates a rich text editor with formatting options"""
-    # Initial content
-    if not st.session_state.get(f"{key_prefix}_content"):
-        st.session_state[f"{key_prefix}_content"] = value
-
-    # Formatting toolbar
-    col1, col2, col3, col4, col5, col6 = st.columns([1, 1, 1, 1, 1, 2])
+def rich_text_editor(initial_content="", key=None):
+    """Custom component for rich text editing with formatting options"""
+    container = st.container()
     
-    with col1:
-        if st.button("Bold", key=f"{key_prefix}_bold"):
-            st.session_state[f"{key_prefix}_content"] = f'<strong>{st.session_state[f"{key_prefix}_content"]}</strong>'
+    # Create toolbar with formatting options
+    cols = container.columns(8)
     
-    with col2:
-        if st.button("Italic", key=f"{key_prefix}_italic"):
-            st.session_state[f"{key_prefix}_content"] = f'<em>{st.session_state[f"{key_prefix}_content"]}</em>'
+    # Bold button
+    if cols[0].button("**B**", key=f"bold_{key}"):
+        st.session_state[f"content_{key}"] = st.session_state.get(f"content_{key}", initial_content) + "<strong></strong>"
     
-    with col3:
-        if st.button("Underline", key=f"{key_prefix}_underline"):
-            st.session_state[f"{key_prefix}_content"] = f'<u>{st.session_state[f"{key_prefix}_content"]}</u>'
+    # Italic button
+    if cols[1].button("*I*", key=f"italic_{key}"):
+        st.session_state[f"content_{key}"] = st.session_state.get(f"content_{key}", initial_content) + "<em></em>"
     
-    with col4:
-        text_color = st.color_picker("Text Color", "#000000", key=f"{key_prefix}_color")
+    # Underline button
+    if cols[2].button("_U_", key=f"underline_{key}"):
+        st.session_state[f"content_{key}"] = st.session_state.get(f"content_{key}", initial_content) + "<u></u>"
     
-    with col5:
-        bg_color = st.color_picker("BG Color", "#ffffff", key=f"{key_prefix}_bg")
+    # Link button
+    if cols[3].button("🔗", key=f"link_{key}"):
+        st.session_state[f"content_{key}"] = st.session_state.get(f"content_{key}", initial_content) + '<a href=""></a>'
     
-    with col6:
-        if st.button("Apply Colors", key=f"{key_prefix}_apply_colors"):
-            st.session_state[f"{key_prefix}_content"] = f'<span style="color:{text_color};background-color:{bg_color};">{st.session_state[f"{key_prefix}_content"]}</span>'
+    # Header button
+    if cols[4].button("H", key=f"header_{key}"):
+        st.session_state[f"content_{key}"] = st.session_state.get(f"content_{key}", initial_content) + "<h3></h3>"
     
-    # Second row for more formatting options
-    col1, col2, col3, col4 = st.columns([1, 1, 2, 2])
+    # List button
+    if cols[5].button("•", key=f"list_{key}"):
+        st.session_state[f"content_{key}"] = st.session_state.get(f"content_{key}", initial_content) + "<ul><li></li></ul>"
     
-    with col1:
-        size = st.selectbox("Size", ["Default", "Small", "Medium", "Large", "X-Large"], key=f"{key_prefix}_size")
-        size_map = {"Default": "", "Small": "12px", "Medium": "16px", "Large": "20px", "X-Large": "24px"}
+    # Color selector
+    text_color = cols[6].color_picker("T", "#000000", key=f"text_color_{key}")
     
-    with col2:
-        align = st.selectbox("Align", ["Left", "Center", "Right", "Justify"], key=f"{key_prefix}_align")
-        align_map = {"Left": "left", "Center": "center", "Right": "right", "Justify": "justify"}
+    # Background color selector
+    bg_color = cols[7].color_picker("BG", "#ffffff", key=f"bg_color_{key}")
     
-    with col3:
-        link_text = st.text_input("Link Text", key=f"{key_prefix}_link_text")
+    # Apply color button
+    if container.button("Apply Colors", key=f"apply_colors_{key}"):
+        selected_content = st.session_state.get(f"content_{key}", initial_content)
+        st.session_state[f"content_{key}"] = f'<span style="color:{text_color};background-color:{bg_color};">{selected_content}</span>'
     
-    with col4:
-        link_url = st.text_input("URL", key=f"{key_prefix}_link_url")
-        if st.button("Insert Link", key=f"{key_prefix}_insert_link"):
-            if link_text and link_url:
-                st.session_state[f"{key_prefix}_content"] += f' <a href="{link_url}" target="_blank">{link_text}</a>'
+    # Main content area with preview
+    tab1, tab2 = container.tabs(["Edit", "Preview"])
     
-    # Apply size and alignment
-    if st.button("Apply Size/Alignment", key=f"{key_prefix}_apply_format"):
-        style = ""
-        if size_map[size]:
-            style += f"font-size:{size_map[size]};"
-        if align_map[align]:
-            style += f"text-align:{align_map[align]};"
-        
-        if style:
-            st.session_state[f"{key_prefix}_content"] = f'<div style="{style}">{st.session_state[f"{key_prefix}_content"]}</div>'
+    with tab1:
+        content = st.text_area(
+            "HTML Content", 
+            value=st.session_state.get(f"content_{key}", initial_content),
+            height=200,
+            key=f"content_{key}"
+        )
     
-    # Main content area
-    content = st.text_area("Content", st.session_state[f"{key_prefix}_content"], height=200, key=f"{key_prefix}_textarea")
-    st.session_state[f"{key_prefix}_content"] = content
-    
-    # Preview
-    with st.expander("Preview"):
+    with tab2:
         st.markdown(content, unsafe_allow_html=True)
     
     return content
@@ -340,16 +326,12 @@ else:
     with colB:
         if st.button("➕ Add Block"):
             uid = str(uuid.uuid4()); t = BLOCK_TYPES[new_type]
-            if t == "text":
-                p = {"text":"","color":"#000000","size":16}
-            elif t == "text_rich":
-                p = {"rich_text":"<p>Enter your rich text here</p>"}
-            elif t == "text_html":
-                p = {"html":"<div>Enter your HTML here</div>"}
-            elif t in ("youtube","image","embed"):
-                p = {"url":""}
-            else:  # csv
-                p = {"csv":"","color":"#000000","size":16}
+            p = ({"text":"","color":"#000000","size":16}
+                if t=="text" 
+                else {"rich_content":"<p>Edit this rich text</p>"} if t=="textrich"
+                else {"html_content":"<!-- Edit your HTML here -->"} if t=="texthtml"
+                else {"url":""} if t in ("youtube","image","embed")
+                else {"csv":"","color":"#000000","size":16})
             st.session_state["blocks"].append({"uid":uid,"type":t,"payload":p})
 
     for i, blk in enumerate(st.session_state["blocks"]):
@@ -373,15 +355,24 @@ else:
                 blk["payload"]["text"]  = st.text_area("Text",blk["payload"]["text"],key=f"text_{uid}")
                 blk["payload"]["color"] = st.color_picker("Color",blk["payload"]["color"],key=f"col_{uid}")
                 blk["payload"]["size"]  = st.slider("Size(px)",8,48,blk["payload"]["size"],key=f"size_{uid}")
-            elif blk["type"]=="text_rich":
-                blk["payload"]["rich_text"] = rich_text_editor(blk["payload"]["rich_text"], f"rich_{uid}")
-            elif blk["type"]=="text_html":
-                col1, col2 = st.columns([1, 1])
-                with col1:
-                    blk["payload"]["html"] = st.text_area("HTML", blk["payload"]["html"], height=300, key=f"html_{uid}")
-                with col2:
-                    st.markdown("### Preview")
-                    st.markdown(blk["payload"]["html"], unsafe_allow_html=True)
+            elif blk["type"]=="textrich":
+                # Rich text editor with formatting options
+                blk["payload"]["rich_content"] = rich_text_editor(
+                    initial_content=blk["payload"]["rich_content"],
+                    key=f"rich_{uid}"
+                )
+            elif blk["type"]=="texthtml":
+                # HTML editor with preview
+                html_tabs = st.tabs(["HTML Code", "Preview"])
+                with html_tabs[0]:
+                    blk["payload"]["html_content"] = st.text_area(
+                        "HTML Content", 
+                        blk["payload"]["html_content"], 
+                        height=300,
+                        key=f"html_{uid}"
+                    )
+                with html_tabs[1]:
+                    st.markdown(blk["payload"]["html_content"], unsafe_allow_html=True)
             elif blk["type"] in ("youtube","image","embed"):
                 lbl = "Image URL" if blk["type"]=="image" else "URL"
                 blk["payload"]["url"] = st.text_input(lbl,blk["payload"]["url"],key=f"url_{uid}")
