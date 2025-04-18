@@ -9,7 +9,6 @@ from sqlalchemy import create_engine, text
 from updatesidbare import navigation
 import tabledit
 
-# ──────────────────────────────────────────────────────────────
 def safe_rerun():
     if hasattr(st, "experimental_rerun"):
         st.experimental_rerun()
@@ -92,7 +91,7 @@ def block_html(block: dict) -> str:
     # CSV → DataFrame.to_html() with style
     csv_text = (pld.get("csv") or "").strip()
     if not csv_text:
-        return ""  # nothing to render
+        return ""
 
     try:
         df = pd.read_csv(io.StringIO(csv_text))
@@ -184,8 +183,8 @@ else:
     raw = st.checkbox("Treat as raw HTML", value=False, key="title_raw_html")
     title_html = title_txt if raw else f'<h2 style="color:{title_color};font-size:{title_size}px;">{title_txt}</h2>'
 
-    col_upd, col_del = st.columns([1,1])
-    with col_upd:
+    col_up, col_del = st.columns([1,1])
+    with col_up:
         if st.button("🔄 Update Title", key="upd-title"):
             with engine.begin() as conn:
                 if st.session_state["row_id"]:
@@ -195,6 +194,8 @@ else:
                     conn.execute(text(f"INSERT INTO {chosen} (title,content) VALUES(:t,'')"),
                                  {"t": title_html})
             st.success("Title updated.")
+            # force reload from DB
+            st.session_state.pop("table", None)
             safe_rerun()
     with col_del:
         if st.button("🗑️ Delete Title", key="del-title"):
@@ -202,8 +203,8 @@ else:
                 if st.session_state["row_id"]:
                     conn.execute(text(f"UPDATE {chosen} SET title='' WHERE id=:id"),
                                  {"id": st.session_state["row_id"]})
-            st.session_state["title_raw"] = ""
             st.success("Title deleted.")
+            st.session_state.pop("table", None)
             safe_rerun()
 
     st.markdown("---")
@@ -229,32 +230,30 @@ else:
         colA, colB, colC, colD = st.columns([5,1,1,1])
         colA.markdown(f"**Block {idx+1} – {blk['type']}**")
 
-        # Edit toggles expander
-        if colB.button("🖉 Edit", key=f"edit-{uid}"):
+        if colB.button("🖉 Edit",   key=f"edit-{uid}"):
             st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}", False)
 
-        # Update entire content immediately
         if colC.button("🔄 Update", key=f"upd-{uid}"):
             new_html = "<br>".join(b for b in (block_html(b2) for b2 in st.session_state["blocks"]) if b)
             with engine.begin() as conn:
                 conn.execute(text(f"UPDATE {chosen} SET content=:c WHERE id=:id"),
                              {"c": new_html, "id": st.session_state["row_id"]})
             st.success(f"Block {idx+1} updated.")
+            st.session_state.pop("table", None)
             safe_rerun()
 
-        # Instant delete
         if colD.button("🗑️ Delete", key=f"del-{uid}"):
             # remove from state
             st.session_state["blocks"].pop(idx)
-            # persist change
+            # persist
             new_html = "<br>".join(b for b in (block_html(b2) for b2 in st.session_state["blocks"]) if b)
             with engine.begin() as conn:
                 conn.execute(text(f"UPDATE {chosen} SET content=:c WHERE id=:id"),
                              {"c": new_html, "id": st.session_state["row_id"]})
             st.success(f"Block {idx+1} deleted.")
+            st.session_state.pop("table", None)
             safe_rerun()
 
-        # Expander for editing fields
         with st.expander("", expanded=st.session_state.get(f"exp_{uid}", False)):
             if blk["type"] == "text":
                 blk["payload"]["text"]  = st.text_area("Text", blk["payload"]["text"], key=f"text_{uid}")
@@ -288,9 +287,9 @@ else:
                 blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"]["color"], key=f"csv_col_{uid}")
                 blk["payload"]["size"]  = st.slider("Font Size(px)", 8,48, blk["payload"]["size"], key=f"csv_size_{uid}")
 
-        st.markdown("")  # single line‑space; HTML will collapse to one <br>
+        st.markdown("")  # one-line space
 
-    # — Global save as fallback —
+    # — Global fallback Save —
     if st.button("💾 Save / Update All", key="save-all"):
         full_html = "<br>".join(b for b in (block_html(b2) for b2 in st.session_state["blocks"]) if b)
         with engine.begin() as conn:
@@ -301,11 +300,14 @@ else:
                 conn.execute(text(f"INSERT INTO {chosen} (title,content) VALUES('',:c)"),
                              {"c": full_html})
         st.success("All changes saved.")
+        st.session_state.pop("table", None)
         safe_rerun()
 
     # — Live Preview with single <br> between blocks —
     st.markdown("---")
     st.subheader("🔍 Live Preview")
-    st.markdown(title_html, unsafe_allow_html=True)
-    preview_html = "<br>".join(b for b in (block_html(b2) for b2 in st.session_state["blocks"]) if b)
+    st.markdown( title_html, unsafe_allow_html=True )
+    preview_html = "<br>".join(
+        b for b in (block_html(b2) for b2 in st.session_state["blocks"]) if b
+    )
     st.markdown(preview_html, unsafe_allow_html=True)
