@@ -1,4 +1,5 @@
-# This makes the directory a Python package
+import streamlit as st  # Add this import at the top
+
 from .tab1 import show as show_tab1
 from .tab2 import show as show_tab2
 from .tab3 import show as show_tab3
