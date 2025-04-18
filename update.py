@@ -54,59 +54,61 @@ def get_youtube_embed(raw_url: str) -> str:
     return f"https://www.youtube-nocookie.com/embed/{vid}" if vid else raw
 
 def load_row(table: str):
-    """Fetch the single row (id, title, content) or None."""
     row = engine.connect().execute(
         text(f"SELECT id, title, content FROM {table} ORDER BY id LIMIT 1")
     ).fetchone()
     return row
 
 def update_content_db(chosen: str):
-    """Persist current blocks to the DB (insert or update)."""
-    # Build combined HTML with one <br> between blocks
-    html_parts = [block_html(b) for b in st.session_state["blocks"] if block_html(b)]
-    new_html = "<br>".join(html_parts)
-    if st.session_state.get("row_id"):
-        engine.begin().execute(
-            text(f"UPDATE {chosen} SET content = :c WHERE id = :id"),
-            {"c": new_html, "id": st.session_state["row_id"]},
-        )
-    else:
-        engine.begin().execute(
-            text(f"INSERT INTO {chosen} (title, content) VALUES ('', :c)"),
-            {"c": new_html},
-        )
-        # grab the new row_id
-        row = load_row(chosen)
-        st.session_state["row_id"] = row.id if row else None
+    """Persist current blocks to the DB immediately."""
+    parts = [block_html(b) for b in st.session_state["blocks"] if block_html(b)]
+    new_html = "<br>".join(parts)
+    with engine.begin() as conn:
+        if st.session_state.get("row_id"):
+            conn.execute(
+                text(f"UPDATE {chosen} SET content = :c WHERE id = :id"),
+                {"c": new_html, "id": st.session_state["row_id"]},
+            )
+        else:
+            conn.execute(
+                text(f"INSERT INTO {chosen} (title, content) VALUES ('', :c)"),
+                {"c": new_html},
+            )
+    # refresh row_id (in case of first insert)
+    row = load_row(chosen)
+    st.session_state["row_id"] = row.id if row else None
 
 def update_title_db(chosen: str, title_html: str):
-    """Persist title to the DB (insert or update)."""
-    if st.session_state.get("row_id"):
-        engine.begin().execute(
-            text(f"UPDATE {chosen} SET title = :t WHERE id = :id"),
-            {"t": title_html, "id": st.session_state["row_id"]},
-        )
-    else:
-        engine.begin().execute(
-            text(f"INSERT INTO {chosen} (title, content) VALUES (:t, '')"),
-            {"t": title_html},
-        )
-        row = load_row(chosen)
-        st.session_state["row_id"] = row.id if row else None
+    """Persist title to the DB immediately."""
+    with engine.begin() as conn:
+        if st.session_state.get("row_id"):
+            conn.execute(
+                text(f"UPDATE {chosen} SET title = :t WHERE id = :id"),
+                {"t": title_html, "id": st.session_state["row_id"]},
+            )
+        else:
+            conn.execute(
+                text(f"INSERT INTO {chosen} (title, content) VALUES (:t, '')"),
+                {"t": title_html},
+            )
+    row = load_row(chosen)
+    st.session_state["row_id"] = row.id if row else None
 
 def delete_title_db(chosen: str):
-    """Wipe out the title in the DB."""
+    """Delete title in the DB immediately."""
     if st.session_state.get("row_id"):
-        engine.begin().execute(
-            text(f"UPDATE {chosen} SET title = '' WHERE id = :id"),
-            {"id": st.session_state["row_id"]},
-        )
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"UPDATE {chosen} SET title = '' WHERE id = :id"),
+                {"id": st.session_state["row_id"]},
+            )
 
 # ──────────────────────────────────────────────────────────────
 # Serialization (unchanged)
 # ──────────────────────────────────────────────────────────────
 def block_html(block: dict) -> str:
-    t = block["type"]; pld = block["payload"]
+    t = block["type"]
+    pld = block["payload"]
     if t == "text":
         return (
             f'<!--BLOCK_START:text-->'
@@ -161,19 +163,18 @@ BLOCK_RGX = re.compile(
 )
 
 def html_to_blocks(html: str) -> list[dict]:
-    blocks = []
+    blocks: list[dict] = []
     for m in BLOCK_RGX.finditer(html or ""):
         t, content = m.group("type"), m.group("html")
         uid = str(uuid.uuid4())
         if t == "text":
             m2 = re.search(
-                r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px.*?>(.*?)</p>', content, re.S
+                r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px.*?>(.*?)</p>',
+                content, re.S
             )
             if m2:
                 c, s, txt = m2.groups()
-                blocks.append(
-                    {"uid":uid, "type":"text", "payload":{"text":txt,"color":c,"size":int(s)}}
-                )
+                blocks.append({"uid":uid,"type":"text","payload":{"text":txt,"color":c,"size":int(s)}})
         elif t == "youtube":
             src = re.search(r'src="([^"]+)"', content).group(1)
             vid = src.split("/")[-1]
@@ -189,9 +190,7 @@ def html_to_blocks(html: str) -> list[dict]:
             m2 = re.search(r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px', content, re.S)
             if m2:
                 c, s = m2.groups()
-                blocks.append(
-                    {"uid":uid, "type":"csv", "payload":{"csv":"","color":c,"size":int(s)}}
-                )
+                blocks.append({"uid":uid,"type":"csv","payload":{"csv":"","color":c,"size":int(s)}})
     return blocks
 
 # ──────────────────────────────────────────────────────────────
@@ -201,7 +200,7 @@ def prime_state(table: str):
     row = load_row(table)
     st.session_state["table"]     = table
     st.session_state["row_id"]    = row.id if row else None
-    st.session_state["title_raw"] = re.sub(r"<[^>]*>","",row.title or "") if row else ""
+    st.session_state["title_raw"] = re.sub(r"<[^>]*>", "", row.title or "") if row else ""
     st.session_state["blocks"]    = html_to_blocks(row.content) if row else []
 
 # ──────────────────────────────────────────────────────────────
@@ -217,7 +216,7 @@ else:
     chosen = st.sidebar.selectbox("Pick a table", TAB_NAMES)
     prime_state(chosen)
 
-    # — Title section —
+    # Title editing
     st.subheader("Title")
     c1, c2, c3 = st.columns([3,1,1])
     with c1:
@@ -227,7 +226,7 @@ else:
     with c3:
         st.number_input("Size(px)", 8,72,24, key="title_size")
     raw = st.checkbox("Treat as raw HTML", value=False, key="title_raw_html")
-    # always computed from session_state keys:
+
     title_html = (
         st.session_state["title_txt"]
         if raw
@@ -310,7 +309,7 @@ else:
                         st.error("Invalid CSV")
                 blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"]["color"], key=f"csv_col_{uid}")
                 blk["payload"]["size"]  = st.slider("Font Size(px)", 8,48, blk["payload"]["size"], key=f"csv_size_{uid}")
-        st.markdown("")  # single blank line
+        st.markdown("")  # one blank line
 
     # Fallback Save All
     if st.button("💾 Save All"):
