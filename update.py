@@ -4,7 +4,6 @@ import re, uuid, io, urllib.parse
 import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine, text
-import streamlit.components.v1 as components
 
 from updatesidbare import navigation
 import tabledit
@@ -40,11 +39,12 @@ TAB_NAMES   = [
     "w5tab1","w5tab2","w5tab3","w5tab4","w5tab5","w5tab6","w5tab7","w5tab8",
 ]
 BLOCK_TYPES = {
-    "Text": "text",
-    "Text/HTML": "richtext",
+    "Text":        "text",
+    "Text/Rich":   "textrich",
+    "Text/HTML":   "texthtml",
     "YouTube URL": "youtube",
-    "Image URL": "image",
-    "Embed URL": "embed",
+    "Image URL":   "image",
+    "Embed URL":   "embed",
     "CSV → Table": "csv",
 }
 
@@ -120,12 +120,14 @@ def block_html(block: dict) -> str:
             f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">'
             f'{p["text"]}</p><!--BLOCK_END-->'
         )
-    if t == "richtext":
+    if t == "textrich":
         return (
-            f'<!--BLOCK_START:richtext-->'
-            f'<div style="color:{p["color"]};font-size:{p["size"]}px;margin:0">'
-            f'{p["html"]}</div><!--BLOCK_END-->'
+            f'<!--BLOCK_START:textrich-->'
+            f'<div class="rich-text" style="font-size:{p["size"]}px;margin:0">'
+            f'{p["richtext"]}</div><!--BLOCK_END-->'
         )
+    if t == "texthtml":
+        return f'<!--BLOCK_START:texthtml-->{p["html"]}<!--BLOCK_END-->'
     if t == "youtube":
         emb = get_youtube_embed(p["url"])
         return (
@@ -170,11 +172,13 @@ def html_to_blocks(html: str) -> list[dict]:
             if m2:
                 c, s, txt = m2.groups()
                 blocks.append({"uid":uid,"type":"text","payload":{"text":txt,"color":c,"size":int(s)}})
-        elif t == "richtext":
-            m2 = re.search(r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px.*?>(.*?)</div>', content, re.S)
+        elif t == "textrich":
+            m2 = re.search(r'font-size:(\d+)px.*?>(.*?)</div>', content, re.S)
             if m2:
-                c, s, html_content = m2.groups()
-                blocks.append({"uid":uid,"type":"richtext","payload":{"html":html_content,"color":c,"size":int(s)}})
+                s, txt = m2.groups()
+                blocks.append({"uid":uid,"type":"textrich","payload":{"richtext":txt,"size":int(s)}})
+        elif t == "texthtml":
+            blocks.append({"uid":uid,"type":"texthtml","payload":{"html":content}})
         elif t == "youtube":
             src = re.search(r'src="([^"]+)"', content).group(1)
             vid = src.split("/")[-1]
@@ -194,6 +198,8 @@ def html_to_blocks(html: str) -> list[dict]:
     return blocks
 
 # ──────────────────────────────────────────────────────────────
+# prime_state now only runs on table change
+# ──────────────────────────────────────────────────────────────
 def prime_state(table: str):
     if "table" not in st.session_state or st.session_state["table"] != table:
         row = load_row(table)
@@ -203,288 +209,142 @@ def prime_state(table: str):
         st.session_state["blocks"]    = html_to_blocks(row.content) if row else []
 
 # ──────────────────────────────────────────────────────────────
-# Simplified Rich Text Editor Implementation
-# ──────────────────────────────────────────────────────────────
-
-def html_editor(key, initial_value="", height=250):
-    # Create a unique key for this editor instance
-    textarea_key = f"html_editor_{key}"
-    
-    # If initial content is provided but not set in session state yet
-    if textarea_key not in st.session_state and initial_value:
-        st.session_state[textarea_key] = initial_value
-    
-    # Render a simple text area with HTML content
-    html_content = st.text_area(
-        "HTML Content (you can use <a href='...'>link text</a> tags for links)",
-        value=st.session_state.get(textarea_key, initial_value),
-        height=height,
-        key=textarea_key
-    )
-    
-    # Preview the HTML
-    if html_content:
-        st.markdown("Preview:")
-        st.markdown(html_content, unsafe_allow_html=True)
-    
-    return html_content
-
-# ──────────────────────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Enhanced Tabbed CMS", layout="wide")
+st.set_page_config(page_title="Tabbed CMS", layout="wide")
 mode = navigation()
-
-# Custom CSS for a nicer UI
-st.markdown("""
-<style>
-    .block-container {
-        background-color: #f9f9f9;
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 20px;
-        border: 1px solid #eee;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
-    .block-header {
-        display: flex;
-        align-items: center;
-        margin-bottom: 10px;
-        background-color: #f0f0f0;
-        padding: 10px;
-        border-radius: 5px;
-    }
-    .stButton>button {
-        width: 100%;
-    }
-    .main-actions {
-        padding: 15px;
-        background-color: #f5f5f5;
-        border-radius: 5px;
-        margin: 20px 0;
-    }
-    .preview-container {
-        border: 1px solid #ddd;
-        padding: 20px;
-        border-radius: 5px;
-        background-color: white;
-    }
-    .title-container {
-        padding: 15px;
-        background-color: #f5f5f5;
-        border-radius: 5px;
-        margin-bottom: 20px;
-    }
-    /* Hide button by creating a special class */
-    .hide-button {
-        display: none !important;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 if mode == "Table Editor":
     tabledit.main()
 else:
-    col1, col2 = st.columns([1, 3])
-    
-    with col1:
-        st.sidebar.header("📑 Content Manager")
-        chosen = st.sidebar.selectbox("Pick a table", TAB_NAMES, index=TAB_NAMES.index(st.session_state.get("table", "intro")) if "table" in st.session_state else 0)
-        prime_state(chosen)
-        
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("Navigation")
-        st.sidebar.info(f"Currently editing: **{chosen}**")
-        
-        # Show quick stats
-        if st.session_state.get("blocks"):
-            block_count = len(st.session_state["blocks"])
-            block_types = {}
-            for b in st.session_state["blocks"]:
-                block_types[b["type"]] = block_types.get(b["type"], 0) + 1
-            
-            st.sidebar.markdown("---")
-            st.sidebar.subheader("Content Stats")
-            st.sidebar.write(f"Total blocks: {block_count}")
-            for bt, count in block_types.items():
-                st.sidebar.write(f"- {bt.capitalize()}: {count}")
-    
-    with col2:
-        st.title("📝 Enhanced Content Manager")
-        
-        # Title Section
-        if st.session_state.get("clear_title_input"):
-            for k in ("title_txt","title_color","title_size","title_raw_html","clear_title_input"):
-                st.session_state.pop(k, None)
+    st.sidebar.header("📑 Content Manager")
+    chosen = st.sidebar.selectbox("Pick a table", TAB_NAMES)
+    prime_state(chosen)
 
-        with st.container():
-            st.markdown('<div class="title-container">', unsafe_allow_html=True)
-            st.subheader("📌 Title")
-            c1, c2, c3 = st.columns([3, 1, 1])
-            with c1:
-                st.text_input("Text", st.session_state["title_raw"], key="title_txt")
-            with c2:
-                st.color_picker("Color", "#000000", key="title_color")
-            with c3:
-                st.number_input("Size(px)", 8, 72, 24, key="title_size")
-            raw = st.checkbox("Raw HTML", value=False, key="title_raw_html")
+    # Title
+    if st.session_state.get("clear_title_input"):
+        for k in ("title_txt","title_color","title_size","title_raw_html","clear_title_input"):
+            st.session_state.pop(k, None)
 
-            title_html = (
-                st.session_state["title_txt"] if raw
-                else f'<h2 style="color:{st.session_state["title_color"]};'
-                    f'font-size:{st.session_state["title_size"]}px;">'
-                    f'{st.session_state["title_txt"]}</h2>'
-            )
+    st.subheader("Title")
+    c1,c2,c3 = st.columns([3,1,1])
+    with c1:
+        st.text_input("Text", st.session_state["title_raw"], key="title_txt")
+    with c2:
+        st.color_picker("Color", "#000000", key="title_color")
+    with c3:
+        st.number_input("Size(px)", 8,72,24, key="title_size")
+    raw = st.checkbox("Raw HTML", value=False, key="title_raw_html")
 
-            u_col, d_col = st.columns([1, 1])
-            with u_col:
-                if st.button("🔄 Update Title", use_container_width=True):
-                    update_title_db(chosen, title_html)
-                    st.success("Title updated.")
-                    safe_rerun()
-            with d_col:
-                if st.button("🗑️ Delete Title", use_container_width=True):
-                    delete_title_db(chosen)
-                    st.session_state["clear_title_input"] = True
-                    st.success("Title deleted.")
-                    safe_rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+    title_html = (
+        st.session_state["title_txt"] if raw
+        else f'<h2 style="color:{st.session_state["title_color"]};'
+             f'font-size:{st.session_state["title_size"]}px;">'
+             f'{st.session_state["title_txt"]}</h2>'
+    )
 
-        # Content Blocks
-        st.subheader("🧩 Content Blocks")
-        
-        with st.container():
-            st.markdown('<div class="block-container">', unsafe_allow_html=True)
-            colA, colB = st.columns([3, 1])
-            with colA:
-                new_type = st.selectbox("Add block type…", list(BLOCK_TYPES.keys()), key="new_type")
-            with colB:
-                if st.button("➕ Add Block", use_container_width=True):
-                    uid = str(uuid.uuid4())
-                    t = BLOCK_TYPES[new_type]
-                    if t == "text":
-                        p = {"text": "", "color": "#000000", "size": 16}
-                    elif t == "richtext":
-                        p = {"html": "", "color": "#000000", "size": 16}
-                    elif t in ("youtube", "image", "embed"):
-                        p = {"url": ""}
-                    else:  # csv
-                        p = {"csv": "", "color": "#000000", "size": 16}
-                    st.session_state["blocks"].append({"uid": uid, "type": t, "payload": p})
-                    safe_rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+    u_col, d_col = st.columns([1,1])
+    with u_col:
+        if st.button("🔄 Update Title"):
+            update_title_db(chosen, title_html)
+            st.success("Title updated.")
+            safe_rerun()
+    with d_col:
+        if st.button("🗑️ Delete Title"):
+            delete_title_db(chosen)
+            st.session_state["clear_title_input"] = True
+            st.success("Title deleted.")
+            safe_rerun()
 
-        # Display blocks
-        if not st.session_state.get("blocks"):
-            st.info("No blocks yet. Add your first block using the selector above.")
-        else:
-            for i, blk in enumerate(st.session_state["blocks"]):
-                uid = blk["uid"]
-                with st.container():
-                    st.markdown(f'<div class="block-container">', unsafe_allow_html=True)
-                    
-                    # Block header
-                    st.markdown(f'<div class="block-header">', unsafe_allow_html=True)
-                    a, e, u, d = st.columns([6, 1, 1, 1])
-                    a.markdown(f"**Block {i+1}: {blk['type'].capitalize()}**")
-                    if e.button("🖉 Edit",   key=f"edit-{uid}"):
-                        st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}",False)
-                    if u.button("🔄 Update", key=f"upd-{uid}"):
-                        update_content_db(chosen)
-                        st.success(f"Block {i+1} saved.")
-                        safe_rerun()
-                    if d.button("🗑️ Delete", key=f"del-{uid}"):
-                        st.session_state["blocks"].pop(i)
-                        update_content_db(chosen)
-                        st.success(f"Block {i+1} deleted.")
-                        safe_rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("---")
+    st.subheader("🧩 Content Blocks")
+    colA, colB = st.columns([3,1])
+    with colA:
+        new_type = st.selectbox("Add block type…", list(BLOCK_TYPES.keys()), key="new_type")
+    with colB:
+        if st.button("➕ Add Block"):
+            uid = str(uuid.uuid4()); t = BLOCK_TYPES[new_type]
+            p = ({"text":"","color":"#000000","size":16}
+                 if t=="text" else {"richtext":"","size":16}
+                 if t=="textrich" else {"html":""}
+                 if t=="texthtml" else {"url":""} if t in ("youtube","image","embed")
+                 else {"csv":"","color":"#000000","size":16})
+            st.session_state["blocks"].append({"uid":uid,"type":t,"payload":p})
 
-                    # Block content editor
-                    with st.expander("", expanded=st.session_state.get(f"exp_{uid}", False)):
-                        if blk["type"] == "text":
-                            blk["payload"]["text"] = st.text_area("Text", blk["payload"]["text"], key=f"text_{uid}", height=150)
-                            col1, col2 = st.columns([1, 1])
-                            with col1:
-                                blk["payload"]["color"] = st.color_picker("Color", blk["payload"]["color"], key=f"col_{uid}")
-                            with col2:
-                                blk["payload"]["size"] = st.slider("Size(px)", 8, 48, blk["payload"]["size"], key=f"size_{uid}")
-                        elif blk["type"] == "richtext":
-                            # Use the simpler HTML editor instead of the complex Quill editor
-                            blk["payload"]["html"] = html_editor(
-                                uid, 
-                                initial_value=blk["payload"].get("html", ""),
-                                height=250
-                            )
-                            
-                            col1, col2 = st.columns([1, 1])
-                            with col1:
-                                blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"].get("color", "#000000"), key=f"rich_col_{uid}")
-                            with col2:
-                                blk["payload"]["size"] = st.slider("Font Size(px)", 8, 48, blk["payload"].get("size", 16), key=f"rich_size_{uid}")
-                        elif blk["type"] in ("youtube", "image", "embed"):
-                            lbl = "Image URL" if blk["type"] == "image" else "URL"
-                            blk["payload"]["url"] = st.text_input(lbl, blk["payload"]["url"], key=f"url_{uid}")
-                            
-                            # Preview for image and YouTube
-                            if blk["type"] == "image" and blk["payload"]["url"]:
-                                st.image(ensure_https(blk["payload"]["url"]), use_column_width=True)
-                            elif blk["type"] == "youtube" and blk["payload"]["url"]:
-                                emb = get_youtube_embed(blk["payload"]["url"])
-                                st.video(blk["payload"]["url"])
-                        else:  # csv
-                            tabs = st.tabs(["Upload CSV", "Paste CSV", "Preview"])
-                            with tabs[0]:
-                                up = st.file_uploader("Upload CSV file", type=["csv"], key=f"file_{uid}")
-                                if up:
-                                    try:
-                                        df = pd.read_csv(up)
-                                        st.dataframe(df)
-                                        blk["payload"]["csv"] = df.to_csv(index=False)
-                                    except Exception as e:
-                                        st.error(f"Invalid CSV: {e}")
-                            with tabs[1]:
-                                txt = st.text_area("CSV text", blk["payload"]["csv"], key=f"csv_{uid}", height=150)
-                                blk["payload"]["csv"] = txt
-                            with tabs[2]:
-                                try:
-                                    if blk["payload"]["csv"]:
-                                        df = pd.read_csv(io.StringIO(blk["payload"]["csv"]))
-                                        st.dataframe(df)
-                                except Exception as e:
-                                    st.error(f"Invalid CSV: {e}")
-                            
-                            col1, col2 = st.columns([1, 1])
-                            with col1:
-                                blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"]["color"], key=f"csv_col_{uid}")
-                            with col2:
-                                blk["payload"]["size"] = st.slider("Font Size(px)", 8, 48, blk["payload"]["size"], key=f"csv_size_{uid}")
-                    
-                    # Show a small preview of the block content
-                    if blk["type"] == "text":
-                        preview = blk["payload"]["text"][:100] + ("..." if len(blk["payload"]["text"]) > 100 else "")
-                        st.markdown(f"<p style='color:{blk['payload']['color']};font-size:{min(blk['payload']['size'], 16)}px;'>{preview}</p>", unsafe_allow_html=True)
-                    elif blk["type"] == "richtext":
-                        st.markdown(f"<div style='color:{blk['payload']['color']};font-size:{min(blk['payload']['size'], 16)}px;'>{blk['payload']['html'][:100] + ('...' if len(blk['payload']['html']) > 100 else '')}</div>", unsafe_allow_html=True)
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    st.markdown("")  # spacing
+    for i, blk in enumerate(st.session_state["blocks"]):
+        uid = blk["uid"]
+        a,e,u,d = st.columns([6,1,1,1])
+        a.markdown(f"**Block {i+1}: {blk['type']}**")
+        if e.button("🖉 Edit",   key=f"edit-{uid}"):
+            st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}",False)
+        if u.button("🔄 Update", key=f"upd-{uid}"):
+            update_content_db(chosen)
+            st.success(f"Block {i+1} saved.")
+            safe_rerun()
+        if d.button("🗑️ Delete", key=f"del-{uid}"):
+            st.session_state["blocks"].pop(i)
+            update_content_db(chosen)
+            st.success(f"Block {i+1} deleted.")
+            safe_rerun()
 
-        # Save all button
-        with st.container():
-            st.markdown('<div class="main-actions">', unsafe_allow_html=True)
-            if st.button("💾 Save All", use_container_width=True):
-                update_content_db(chosen)
-                st.success("All content saved.")
-                safe_rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+        with st.expander("", expanded=st.session_state.get(f"exp_{uid}",False)):
+            if blk["type"]=="text":
+                blk["payload"]["text"]  = st.text_area("Text",blk["payload"]["text"],key=f"text_{uid}")
+                blk["payload"]["color"] = st.color_picker("Color",blk["payload"]["color"],key=f"col_{uid}")
+                blk["payload"]["size"]  = st.slider("Size(px)",8,48,blk["payload"]["size"],key=f"size_{uid}")
+            elif blk["type"]=="textrich":
+                blk["payload"]["richtext"] = st.text_area("Rich Text (supports HTML formatting)", 
+                                            blk["payload"]["richtext"], 
+                                            key=f"richtext_{uid}",
+                                            help="Use HTML tags for formatting: <b>bold</b>, <i>italic</i>, <u>underline</u>, etc.")
+                blk["payload"]["size"] = st.slider("Base Font Size(px)",8,48,blk["payload"]["size"],key=f"richsize_{uid}")
+                
+                # Preview for rich text
+                st.markdown("**Preview:**")
+                st.markdown(f'<div style="font-size:{blk["payload"]["size"]}px;">{blk["payload"]["richtext"]}</div>', 
+                           unsafe_allow_html=True)
+            elif blk["type"]=="texthtml":
+                blk["payload"]["html"] = st.text_area("HTML Code", 
+                                       blk["payload"]["html"], 
+                                       key=f"html_{uid}",
+                                       height=250,
+                                       help="Enter raw HTML code")
+                
+                # Preview for HTML
+                st.markdown("**Preview:**")
+                st.markdown(blk["payload"]["html"], unsafe_allow_html=True)                
+            elif blk["type"] in ("youtube","image","embed"):
+                lbl = "Image URL" if blk["type"]=="image" else "URL"
+                blk["payload"]["url"] = st.text_input(lbl,blk["payload"]["url"],key=f"url_{uid}")
+            else: # csv
+                t1,t2=st.tabs(["Upload","Paste"])
+                with t1:
+                    up=st.file_uploader("CSV",type=["csv"],key=f"file_{uid}")
+                    if up:
+                        try:
+                            df=pd.read_csv(up); st.dataframe(df)
+                            blk["payload"]["csv"]=df.to_csv(index=False)
+                        except Exception as e:
+                            st.error(f"Invalid CSV: {e}")
+                with t2:
+                    txt=st.text_area("CSV text",blk["payload"]["csv"],key=f"csv_{uid}")
+                    blk["payload"]["csv"]=txt
+                    try:
+                        pd.read_csv(io.StringIO(txt)); st.dataframe(pd.read_csv(io.StringIO(txt)))
+                    except:
+                        st.error("Invalid CSV")
+                blk["payload"]["color"]=st.color_picker("Text Color",blk["payload"]["color"],key=f"csv_col_{uid}")
+                blk["payload"]["size"]=st.slider("Font Size(px)",8,48,blk["payload"]["size"],key=f"csv_size_{uid}")
 
-        # Preview section
-        st.markdown("---")
-        with st.container():
-            st.subheader("🔍 Live Preview")
-            st.markdown('<div class="preview-container">', unsafe_allow_html=True)
-            st.markdown(title_html, unsafe_allow_html=True)
-            live_html = "<br>".join(p for p in (block_html(b) for b in st.session_state["blocks"]) if p)
-            st.markdown(live_html, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("")  # exactly one blank line
+
+    if st.button("💾 Save All"):
+        update_content_db(chosen)
+        st.success("All content saved.")
+        safe_rerun()
+
+    st.markdown("---")
+    st.subheader("🔍 Live Preview")
+    st.markdown(title_html, unsafe_allow_html=True)
+    live_html = "<br>".join(p for p in (block_html(b) for b in st.session_state["blocks"]) if p)
+    st.markdown(live_html, unsafe_allow_html=True)
