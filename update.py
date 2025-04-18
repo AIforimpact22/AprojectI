@@ -4,6 +4,7 @@ import re, uuid, io, urllib.parse
 import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine, text
+from streamlit_quill import st_quill  # Importing the streamlit-quill library
 
 from updatesidbare import navigation
 import tabledit
@@ -40,12 +41,12 @@ TAB_NAMES   = [
 ]
 BLOCK_TYPES = {
     "Text":        "text",
-    "Text/Rich":   "richtext",
-    "Text/HTML":   "html",
     "YouTube URL": "youtube",
     "Image URL":   "image",
     "Embed URL":   "embed",
     "CSV → Table": "csv",
+    "Text/Rich":   "rich",  # New block type for Rich Text
+    "Text/HTML":   "html",  # New block type for HTML input
 }
 
 def ensure_https(u: str) -> str:
@@ -116,28 +117,16 @@ def block_html(block: dict) -> str:
     t, p = block["type"], block["payload"]
     if t == "text":
         return (
-            f'<!--BLOCK_START:text-->'
-            f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">'
+            f'<!--BLOCK_START:text-->' 
+            f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">' 
             f'{p["text"]}</p><!--BLOCK_END-->'
-        )
-    if t == "richtext":
-        return (
-            f'<!--BLOCK_START:richtext-->'
-            f'{p["content"]}'
-            f'<!--BLOCK_END-->'
-        )
-    if t == "html":
-        return (
-            f'<!--BLOCK_START:html-->'
-            f'{p["html"]}'
-            f'<!--BLOCK_END-->'
         )
     if t == "youtube":
         emb = get_youtube_embed(p["url"])
         return (
-            f'<!--BLOCK_START:youtube-->'
-            f'<iframe width="560" height="315" src="{emb}" frameborder="0" '
-            f'allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" '
+            f'<!--BLOCK_START:youtube-->' 
+            f'<iframe width="560" height="315" src="{emb}" frameborder="0" ' 
+            f'allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" ' 
             f'allowfullscreen></iframe><!--BLOCK_END-->'
         )
     if t == "image":
@@ -146,8 +135,14 @@ def block_html(block: dict) -> str:
     if t == "embed":
         url = ensure_https(p["url"])
         return (
-            f'<!--BLOCK_START:embed-->'
+            f'<!--BLOCK_START:embed-->' 
             f'<iframe src="{url}" style="width:100%;height:420px;border:none;"></iframe><!--BLOCK_END-->'
+        )
+    if t == "rich":  # New block type for Rich Text
+        return (
+            f'<!--BLOCK_START:rich-->' 
+            f'<div style="color:{p["color"]};font-size:{p["size"]}px;">' 
+            f'{p["text"]}</div><!--BLOCK_END-->'
         )
     # CSV
     txt = (p.get("csv") or "").strip()
@@ -159,8 +154,8 @@ def block_html(block: dict) -> str:
     except Exception as e:
         return f'<!--BLOCK_START:csv--><p style="color:red;">⚠️ {e}</p><!--BLOCK_END-->'
     return (
-        f'<!--BLOCK_START:csv-->'
-        f'<div style="color:{p["color"]};font-size:{p["size"]}px;">'
+        f'<!--BLOCK_START:csv-->' 
+        f'<div style="color:{p["color"]};font-size:{p["size"]}px;">' 
         f'{raw}</div><!--BLOCK_END-->'
     )
 
@@ -176,10 +171,6 @@ def html_to_blocks(html: str) -> list[dict]:
             if m2:
                 c, s, txt = m2.groups()
                 blocks.append({"uid":uid,"type":"text","payload":{"text":txt,"color":c,"size":int(s)}})
-        elif t == "richtext":
-            blocks.append({"uid":uid,"type":"richtext","payload":{"content":content}})
-        elif t == "html":
-            blocks.append({"uid":uid,"type":"html","payload":{"html":content}})
         elif t == "youtube":
             src = re.search(r'src="([^"]+)"', content).group(1)
             vid = src.split("/")[-1]
@@ -196,6 +187,11 @@ def html_to_blocks(html: str) -> list[dict]:
             c = re.search(r'color:(#[0-9A-Fa-f]{6})', content, re.S).group(1) if "color" in content else "#000"
             s = int(m2.group(1)) if m2 else 14
             blocks.append({"uid":uid,"type":"csv","payload":{"csv":"","color":c,"size":s}})
+        elif t == "rich":  # Parse the new rich text block
+            m2 = re.search(r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px.*?>(.*?)</div>', content, re.S)
+            if m2:
+                c, s, txt = m2.groups()
+                blocks.append({"uid":uid,"type":"rich","payload":{"text":txt,"color":c,"size":int(s)}})
     return blocks
 
 # ──────────────────────────────────────────────────────────────
@@ -265,66 +261,12 @@ else:
     with colB:
         if st.button("➕ Add Block"):
             uid = str(uuid.uuid4()); t = BLOCK_TYPES[new_type]
-            
-            if t == "text":
-                p = {"text":"","color":"#000000","size":16}
-            elif t == "richtext":
-                p = {"content":"<p>Edit your rich text here...</p>"}
-            elif t == "html":
-                p = {"html":"<!-- Add your HTML here -->"}
-            elif t in ("youtube","image","embed"):
-                p = {"url":""}
-            else:  # csv
-                p = {"csv":"","color":"#000000","size":16}
-                
+            p = ({"text":"","color":"#000000","size":16}
+                 if t=="text" else {"url":""} if t in ("youtube","image","embed")
+                 else {"csv":"","color":"#000000","size":16} if t=="csv"
+                 else {"text":"","color":"#000000","size":16} if t=="rich"  # Initialize for new block type
+                 else {"html":""} if t=="html" else {})
             st.session_state["blocks"].append({"uid":uid,"type":t,"payload":p})
-
-    # Rich Text Formatting Toolbar
-    def create_rich_toolbar(uid):
-        col1, col2, col3, col4, col5, col6 = st.columns([1,1,1,1,1,1])
-        
-        with col1:
-            if st.button("Bold", key=f"bold_{uid}"):
-                content = st.session_state.get(f"richtext_content_{uid}", "")
-                st.session_state[f"richtext_content_{uid}"] = f"<strong>{content}</strong>"
-                
-        with col2:
-            if st.button("Italic", key=f"italic_{uid}"):
-                content = st.session_state.get(f"richtext_content_{uid}", "")
-                st.session_state[f"richtext_content_{uid}"] = f"<em>{content}</em>"
-                
-        with col3:
-            if st.button("Underline", key=f"underline_{uid}"):
-                content = st.session_state.get(f"richtext_content_{uid}", "")
-                st.session_state[f"richtext_content_{uid}"] = f"<u>{content}</u>"
-                
-        with col4:
-            color = st.color_picker("Color", "#000000", key=f"text_color_{uid}")
-            
-        with col5:
-            bg_color = st.color_picker("Background", "#ffffff", key=f"bg_color_{uid}")
-            
-        with col6:
-            if st.button("Apply Colors", key=f"apply_colors_{uid}"):
-                content = st.session_state.get(f"richtext_content_{uid}", "")
-                st.session_state[f"richtext_content_{uid}"] = f'<span style="color:{color};background-color:{bg_color};">{content}</span>'
-                
-        col1, col2, col3 = st.columns([1,1,1])
-        
-        with col1:
-            if st.button("Link", key=f"link_{uid}"):
-                content = st.session_state.get(f"richtext_content_{uid}", "")
-                url = st.session_state.get(f"link_url_{uid}", "https://")
-                st.session_state[f"richtext_content_{uid}"] = f'<a href="{url}">{content}</a>'
-        
-        with col2:
-            st.text_input("URL", "https://", key=f"link_url_{uid}")
-            
-        with col3:
-            size = st.slider("Size", 8, 36, 16, key=f"font_size_{uid}")
-            if st.button("Apply Size", key=f"apply_size_{uid}"):
-                content = st.session_state.get(f"richtext_content_{uid}", "")
-                st.session_state[f"richtext_content_{uid}"] = f'<span style="font-size:{size}px">{content}</span>'
 
     for i, blk in enumerate(st.session_state["blocks"]):
         uid = blk["uid"]
@@ -343,97 +285,19 @@ else:
             safe_rerun()
 
         with st.expander("", expanded=st.session_state.get(f"exp_{uid}",False)):
-            if blk["type"]=="text":
-                blk["payload"]["text"]  = st.text_area("Text",blk["payload"]["text"],key=f"text_{uid}")
-                blk["payload"]["color"] = st.color_picker("Color",blk["payload"]["color"],key=f"col_{uid}")
-                blk["payload"]["size"]  = st.slider("Size(px)",8,48,blk["payload"]["size"],key=f"size_{uid}")
-            elif blk["type"]=="richtext":
-                # Initialize the content in session state if not already there
-                if f"richtext_content_{uid}" not in st.session_state:
-                    st.session_state[f"richtext_content_{uid}"] = blk["payload"].get("content", "<p>Edit your rich text here...</p>")
-                
-                # Show rich text toolbar
-                create_rich_toolbar(uid)
-                
-                # Text area for content editing with HTML display
-                content = st.text_area("HTML Content", 
-                                      st.session_state[f"richtext_content_{uid}"],
-                                      height=200, 
-                                      key=f"richtext_edit_{uid}")
-                st.session_state[f"richtext_content_{uid}"] = content
-                blk["payload"]["content"] = content
-                
-                # Preview
-                st.markdown("### Preview")
-                st.markdown(content, unsafe_allow_html=True)
-                
-                # HTML editor buttons (for common elements)
-                st.markdown("### Quick Elements")
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    if st.button("Add Heading", key=f"add_h2_{uid}"):
-                        st.session_state[f"richtext_content_{uid}"] += "\n<h2>New Heading</h2>"
-                        blk["payload"]["content"] = st.session_state[f"richtext_content_{uid}"]
-                        safe_rerun()
-                
-                with col2:
-                    if st.button("Add Paragraph", key=f"add_p_{uid}"):
-                        st.session_state[f"richtext_content_{uid}"] += "\n<p>New paragraph text here.</p>"
-                        blk["payload"]["content"] = st.session_state[f"richtext_content_{uid}"]
-                        safe_rerun()
-                
-                with col3:
-                    if st.button("Add List", key=f"add_list_{uid}"):
-                        st.session_state[f"richtext_content_{uid}"] += "\n<ul>\n  <li>Item 1</li>\n  <li>Item 2</li>\n  <li>Item 3</li>\n</ul>"
-                        blk["payload"]["content"] = st.session_state[f"richtext_content_{uid}"]
-                        safe_rerun()
-                        
-                with col4:
-                    if st.button("Add Table", key=f"add_table_{uid}"):
-                        st.session_state[f"richtext_content_{uid}"] += """\n<table border="1">
-  <tr>
-    <th>Header 1</th>
-    <th>Header 2</th>
-  </tr>
-  <tr>
-    <td>Row 1, Cell 1</td>
-    <td>Row 1, Cell 2</td>
-  </tr>
-  <tr>
-    <td>Row 2, Cell 1</td>
-    <td>Row 2, Cell 2</td>
-  </tr>
-</table>"""
-                        blk["payload"]["content"] = st.session_state[f"richtext_content_{uid}"]
-                        safe_rerun()
-                
-            elif blk["type"]=="html":
-                blk["payload"]["html"] = st.text_area("HTML", blk["payload"]["html"], height=300, key=f"html_{uid}")
-                with st.expander("HTML Preview"):
-                    st.markdown(blk["payload"]["html"], unsafe_allow_html=True)
-            elif blk["type"] in ("youtube","image","embed"):
-                lbl = "Image URL" if blk["type"]=="image" else "URL"
-                blk["payload"]["url"] = st.text_input(lbl,blk["payload"]["url"],key=f"url_{uid}")
-            else: # csv
-                t1,t2=st.tabs(["Upload","Paste"])
-                with t1:
-                    up=st.file_uploader("CSV",type=["csv"],key=f"file_{uid}")
-                    if up:
-                        try:
-                            df=pd.read_csv(up); st.dataframe(df)
-                            blk["payload"]["csv"]=df.to_csv(index=False)
-                        except Exception as e:
-                            st.error(f"Invalid CSV: {e}")
-                with t2:
-                    txt=st.text_area("CSV text",blk["payload"]["csv"],key=f"csv_{uid}")
-                    blk["payload"]["csv"]=txt
-                    try:
-                        pd.read_csv(io.StringIO(txt)); st.dataframe(pd.read_csv(io.StringIO(txt)))
-                    except:
-                        st.error("Invalid CSV")
-                blk["payload"]["color"]=st.color_picker("Text Color",blk["payload"]["color"],key=f"csv_col_{uid}")
-                blk["payload"]["size"]=st.slider("Font Size(px)",8,48,blk["payload"]["size"],key=f"csv_size_{uid}")
+            if blk["type"] == "text":
+                blk["payload"]["text"] = st.text_area("Text", blk["payload"]["text"], key=f"text_{uid}")
+                blk["payload"]["color"] = st.color_picker("Color", blk["payload"]["color"], key=f"col_{uid}")
+                blk["payload"]["size"] = st.slider("Size(px)", 8, 48, blk["payload"]["size"], key=f"size_{uid}")
+            elif blk["type"] in ("youtube", "image", "embed"):
+                lbl = "Image URL" if blk["type"] == "image" else "URL"
+                blk["payload"]["url"] = st.text_input(lbl, blk["payload"]["url"], key=f"url_{uid}")
+            elif blk["type"] == "rich":
+                blk["payload"]["text"] = st_quill(value=blk["payload"]["text"], key=f"rich_{uid}")
+                blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"]["color"], key=f"rich_col_{uid}")
+                blk["payload"]["size"] = st.slider("Font Size(px)", 8, 48, blk["payload"]["size"], key=f"rich_size_{uid}")
+            elif blk["type"] == "html":
+                blk["payload"]["html"] = st.text_area("HTML", blk["payload"]["html"], key=f"html_{uid}")
 
         st.markdown("")  # exactly one blank line
 
