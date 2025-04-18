@@ -202,85 +202,32 @@ def prime_state(table: str):
         st.session_state["title_raw"] = re.sub(r"<[^>]*>", "", row.title or "") if row else ""
         st.session_state["blocks"]    = html_to_blocks(row.content) if row else []
 
-# Rich text editor component
-def create_rich_text_editor(initial_value="", height=300):
-    html = f"""
-    <div style="margin-bottom:10px">
-        <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-        <div id="editor" style="height:{height}px"></div>
-        <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
-        <script>
-            var quill = new Quill('#editor', {{
-                theme: 'snow',
-                modules: {{
-                    toolbar: [
-                        [{{ 'header': [1, 2, 3, false] }}],
-                        ['bold', 'italic', 'underline', 'strike'],
-                        [{{ 'color': [] }}, {{ 'background': [] }}],
-                        ['link'],
-                        [{{ 'list': 'ordered' }}, {{ 'list': 'bullet' }}],
-                        ['clean']
-                    ]
-                }}
-            }});
-            quill.root.innerHTML = `{initial_value.replace('`', '\\`')}`;
-            
-            window.addEventListener('message', function(e) {{
-                if (e.data.type === 'get_content') {{
-                    window.parent.postMessage({{
-                        type: 'quill_content',
-                        content: quill.root.innerHTML,
-                        id: e.data.id
-                    }}, '*');
-                }}
-            }}, false);
-        </script>
-    </div>
-    """
-    return components.html(html, height=height+130)
+# ──────────────────────────────────────────────────────────────
+# Simplified Rich Text Editor Implementation
+# ──────────────────────────────────────────────────────────────
 
-def get_rich_text_content(key):
-    import uuid
-    import time
-    import json
+def html_editor(key, initial_value="", height=250):
+    # Create a unique key for this editor instance
+    textarea_key = f"html_editor_{key}"
     
-    request_id = str(uuid.uuid4())
-    st.session_state[f"richtext_result_{key}"] = None
+    # If initial content is provided but not set in session state yet
+    if textarea_key not in st.session_state and initial_value:
+        st.session_state[textarea_key] = initial_value
     
-    components.html(
-        f"""
-        <script>
-        window.parent.postMessage({{
-            type: 'get_content',
-            id: '{request_id}'
-        }}, '*');
-        
-        window.addEventListener('message', function(e) {{
-            if (e.data.type === 'quill_content' && e.data.id === '{request_id}') {{
-                const data = JSON.stringify(e.data.content);
-                const input = window.parent.document.getElementById('richtext_result_{key}');
-                if (input) input.value = data;
-                const button = window.parent.document.getElementById('richtext_submit_{key}');
-                if (button) button.click();
-            }}
-        }}, false);
-        </script>
-        """,
-        height=0
+    # Render a simple text area with HTML content
+    html_content = st.text_area(
+        "HTML Content (you can use <a href='...'>link text</a> tags for links)",
+        value=st.session_state.get(textarea_key, initial_value),
+        height=height,
+        key=textarea_key
     )
     
-    st.text_input(f"Hidden Result", key=f"richtext_result_{key}", label_visibility="collapsed")
+    # Preview the HTML
+    if html_content:
+        st.markdown("Preview:")
+        st.markdown(html_content, unsafe_allow_html=True)
     
-    if st.button("Get Content", key=f"richtext_submit_{key}", style="display:none;"):
-        pass
-    
-    result = st.session_state.get(f"richtext_result_{key}")
-    if result:
-        try:
-            return json.loads(result)
-        except:
-            return result
-    return None
+    return html_content
 
 # ──────────────────────────────────────────────────────────────
 # Main
@@ -327,6 +274,10 @@ st.markdown("""
         background-color: #f5f5f5;
         border-radius: 5px;
         margin-bottom: 20px;
+    }
+    /* Hide button by creating a special class */
+    .hide-button {
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -436,8 +387,8 @@ else:
                     st.markdown(f'<div class="block-header">', unsafe_allow_html=True)
                     a, e, u, d = st.columns([6, 1, 1, 1])
                     a.markdown(f"**Block {i+1}: {blk['type'].capitalize()}**")
-                    if e.button("🖉 Edit", key=f"edit-{uid}"):
-                        st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}", False)
+                    if e.button("🖉 Edit",   key=f"edit-{uid}"):
+                        st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}",False)
                     if u.button("🔄 Update", key=f"upd-{uid}"):
                         update_content_db(chosen)
                         st.success(f"Block {i+1} saved.")
@@ -459,14 +410,12 @@ else:
                             with col2:
                                 blk["payload"]["size"] = st.slider("Size(px)", 8, 48, blk["payload"]["size"], key=f"size_{uid}")
                         elif blk["type"] == "richtext":
-                            st.write("Rich Text Editor:")
-                            # Show existing content in the editor
-                            create_rich_text_editor(blk["payload"].get("html", ""), height=250)
-                            
-                            # Get the updated content when needed
-                            new_content = get_rich_text_content(uid)
-                            if new_content:
-                                blk["payload"]["html"] = new_content
+                            # Use the simpler HTML editor instead of the complex Quill editor
+                            blk["payload"]["html"] = html_editor(
+                                uid, 
+                                initial_value=blk["payload"].get("html", ""),
+                                height=250
+                            )
                             
                             col1, col2 = st.columns([1, 1])
                             with col1:
