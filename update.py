@@ -126,10 +126,8 @@ def block_html(block: dict) -> str:
         url = ensure_https(pld["url"])
         return (
             f'<!--BLOCK_START:embed-->'
-            f'<iframe src="{url}" style="width:100%;height:420px;border:none;"></iframe>'
-            f'<!--BLOCK_END-->'
+            f'<iframe src="{url}" style="width:100%;height:420px;border:none;"></iframe><!--BLOCK_END-->'
         )
-    # CSV
     csv_text = (pld.get("csv") or "").strip()
     if not csv_text:
         return ""
@@ -140,7 +138,9 @@ def block_html(block: dict) -> str:
         return f'<!--BLOCK_START:csv--><p style="color:red;">⚠️ Invalid CSV: {e}</p><!--BLOCK_END-->'
     return (
         f'<!--BLOCK_START:csv-->'
-        f'<div style="color:{pld["color"]};font-size:{pld["size"]}px;">{raw}</div><!--BLOCK_END-->'
+        f'<div style="color:{pld["color"]};'
+        f'font-size:{pld["size"]}px;">{raw}'
+        f'</div><!--BLOCK_END-->'
     )
 
 BLOCK_RGX = re.compile(r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S)
@@ -184,7 +184,7 @@ def prime_state(table: str):
     st.session_state["blocks"]    = html_to_blocks(row.content) if row else []
 
 # ──────────────────────────────────────────────────────────────
-# Main
+# Kick off
 # ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Tabbed CMS", layout="wide")
 mode = navigation()
@@ -196,7 +196,12 @@ else:
     chosen = st.sidebar.selectbox("Pick a table", TAB_NAMES)
     prime_state(chosen)
 
-    # Title section
+    # If delete_title_flag is set, clear the input widgets before we render them
+    if st.session_state.get("clear_title_input"):
+        for k in ("title_txt","title_color","title_size","title_raw_html","clear_title_input"):
+            st.session_state.pop(k, None)
+
+    # — Title section —
     st.subheader("Title")
     t1, t2, t3 = st.columns([3,1,1])
     with t1:
@@ -223,9 +228,8 @@ else:
     with c_del:
         if st.button("🗑️ Delete Title"):
             delete_title_db(chosen)
-            # pop keys so the widget is recreated blank on rerun
-            for k in ("title_txt","title_color","title_size","title_raw_html"):
-                st.session_state.pop(k, None)
+            # set flag so inputs get cleared on rerun
+            st.session_state["clear_title_input"] = True
             st.success("Title deleted.")
             safe_rerun()
 
