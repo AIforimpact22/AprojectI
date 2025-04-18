@@ -1,19 +1,114 @@
-# New imports at the top
-import streamlit_quill
-from streamlit_quill import st_quill
+from __future__ import annotations
+import re, uuid, io, urllib.parse
 
-# Updated BLOCK_TYPES with new entries
+import streamlit as st
+import pandas as pd
+from sqlalchemy import create_engine, text
+
+from updatesidbare import navigation
+import tabledit
+from streamlit_quill import st_quill
+from streamlit_ace import st_ace
+
+# ──────────────────────────────────────────────────────────────
+def safe_rerun():
+    if hasattr(st, "experimental_rerun"):
+        st.experimental_rerun()
+    else:
+        st.rerun()
+
+@st.cache_resource(show_spinner=False)
+def get_engine():
+    return create_engine(
+        st.secrets["postgres"]["connection_string"],
+        pool_pre_ping=True,
+        isolation_level="AUTOCOMMIT",
+    )
+
+engine = get_engine()
+
+TAB_NAMES = [
+    "intro",
+    "w1tab1", "w1tab2", "w1tab3", "w1tab4", "w1tab5", "w1tab6", "w1tab7", "w1tab8", "w1tab9", "w1tab10", "w1tab11",
+    "w2tab1", "w2tab2", "w2tab3", "w2tab4", "w2tab5", "w2tab6", "w2tab7", "w2tab8", "w2tab9", "w2tab10", "w2tab11", "w2tab12",
+    "w3tab1", "w3tab2", "w3tab3", "w3tab4", "w3tab5", "w3tab6", "w3tab7", "w3tab8", "w3tab9", "w3tab10", "w3tab11", "w3tab12",
+    "w4tab1", "w4tab2", "w4tab3", "w4tab4", "w4tab5", "w4tab6", "w4tab7",
+    "w5tab1", "w5tab2", "w5tab3", "w5tab4", "w5tab5", "w5tab6", "w5tab7", "w5tab8",
+]
 BLOCK_TYPES = {
     "Text":        "text",
-    "Text/Rich":   "text_rich",
-    "Text/HTML":   "text_html",
     "YouTube URL": "youtube",
     "Image URL":   "image",
     "Embed URL":   "embed",
     "CSV → Table": "csv",
+    "Text/Rich":   "rich",  # New type for rich text editor
+    "Text/HTML":   "html",  # New type for HTML editor
 }
 
-# Modified block_html function
+def ensure_https(u: str) -> str:
+    return u if u.startswith(("http://","https://")) else "https://" + u
+
+def get_youtube_embed(raw_url: str) -> str:
+    raw = raw_url.strip()
+    if not raw.startswith(("http://","https://")):
+        raw = "https://" + raw
+    p = urllib.parse.urlparse(raw)
+    vid = ""
+    if "youtu.be" in p.netloc:
+        vid = p.path.lstrip("/")
+    elif "youtube.com" in p.netloc:
+        qs = urllib.parse.parse_qs(p.query)
+        vid = qs.get("v", [""])[0]
+    return f"https://www.youtube-nocookie.com/embed/{vid}" if vid else raw
+
+def load_row(table: str):
+    return engine.connect().execute(
+        text(f"SELECT id, title, content FROM {table} ORDER BY id LIMIT 1")
+    ).fetchone()
+
+def update_content_db(chosen: str):
+    parts = [block_html(b) for b in st.session_state["blocks"] if block_html(b)]
+    new_html = "<br>".join(parts)
+    if st.session_state.get("row_id"):
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"UPDATE {chosen} SET content = :c WHERE id = :id"),
+                {"c": new_html, "id": st.session_state["row_id"]},
+            )
+    else:
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"INSERT INTO {chosen} (title, content) VALUES ('', :c)"),
+                {"c": new_html},
+            )
+        row = load_row(chosen)
+        st.session_state["row_id"] = row.id if row else None
+
+def update_title_db(chosen: str, title_html: str):
+    if st.session_state.get("row_id"):
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"UPDATE {chosen} SET title = :t WHERE id = :id"),
+                {"t": title_html, "id": st.session_state["row_id"]},
+            )
+    else:
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"INSERT INTO {chosen} (title, content) VALUES (:t, '')"),
+                {"t": title_html},
+            )
+        row = load_row(chosen)
+        st.session_state["row_id"] = row.id if row else None
+
+def delete_title_db(chosen: str):
+    if st.session_state.get("row_id"):
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"UPDATE {chosen} SET title = '' WHERE id = :id"),
+                {"id": st.session_state["row_id"]},
+            )
+
+# ──────────────────────────────────────────────────────────────
 def block_html(block: dict) -> str:
     t, p = block["type"], block["payload"]
     if t == "text":
@@ -22,59 +117,185 @@ def block_html(block: dict) -> str:
             f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">'
             f'{p["text"]}</p><!--BLOCK_END-->'
         )
-    if t == "text_rich":
-        return f'<!--BLOCK_START:text_rich-->{p.get("html", "")}<!--BLOCK_END-->'
-    if t == "text_html":
-        return f'<!--BLOCK_START:text_html-->{p.get("html", "")}<!--BLOCK_END-->'
-    # ... (rest of the existing block types remain unchanged)
+    if t == "youtube":
+        emb = get_youtube_embed(p["url"])
+        return (
+            f'<!--BLOCK_START:youtube-->'
+            f'<iframe width="560" height="315" src="{emb}" frameborder="0" '
+            f'allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" '
+            f'allowfullscreen></iframe><!--BLOCK_END-->'
+        )
+    if t == "image":
+        url = ensure_https(p["url"])
+        return f'<!--BLOCK_START:image--><img src="{url}" style="max-width:100%;"><!--BLOCK_END-->'
+    if t == "embed":
+        url = ensure_https(p["url"])
+        return (
+            f'<!--BLOCK_START:embed-->'
+            f'<iframe src="{url}" style="width:100%;height:420px;border:none;"></iframe><!--BLOCK_END-->'
+        )
+    if t == "rich":
+        return (
+            f'<!--BLOCK_START:rich-->'
+            f'{p["content"]}<!--BLOCK_END-->'
+        )
+    if t == "html":
+        return (
+            f'<!--BLOCK_START:html-->'
+            f'<pre>{p["content"]}</pre><!--BLOCK_END-->'
+        )
+    # CSV
+    txt = (p.get("csv") or "").strip()
+    if not txt:
+        return ""
+    try:
+        df = pd.read_csv(io.StringIO(txt))
+        raw = df.to_html(index=False, border=1)
+    except Exception as e:
+        return f'<!--BLOCK_START:csv--><p style="color:red;">⚠️ {e}</p><!--BLOCK_END-->'
+    return (
+        f'<!--BLOCK_START:csv-->'
+        f'<div style="color:{p["color"]};font-size:{p["size"]}px;">'
+        f'{raw}</div><!--BLOCK_END-->'
+    )
 
-# Updated html_to_blocks function
+BLOCK_RGX = re.compile(r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S)
+
 def html_to_blocks(html: str) -> list[dict]:
     blocks = []
     for m in BLOCK_RGX.finditer(html or ""):
         t, content = m.group("type"), m.group("html")
         uid = str(uuid.uuid4())
-        
         if t == "text":
-            # Existing text block parsing
-        elif t == "text_rich":
-            blocks.append({
-                "uid": uid,
-                "type": "text_rich",
-                "payload": {"html": content}
-            })
-        elif t == "text_html":
-            blocks.append({
-                "uid": uid,
-                "type": "text_html",
-                "payload": {"html": content}
-            })
-        # ... (rest of the existing block types remain unchanged)
+            m2 = re.search(r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px.*?>(.*?)</p>', content, re.S)
+            if m2:
+                c, s, txt = m2.groups()
+                blocks.append({"uid":uid,"type":"text","payload":{"text":txt,"color":c,"size":int(s)}})
+        elif t == "youtube":
+            src = re.search(r'src="([^"]+)"', content).group(1)
+            vid = src.split("/")[-1]
+            url = f"https://www.youtube.com/watch?v={vid}"
+            blocks.append({"uid":uid,"type":"youtube","payload":{"url":url}})
+        elif t == "image":
+            url = re.search(r'src="([^"]+)"', content).group(1)
+            blocks.append({"uid":uid,"type":"image","payload":{"url":url}})
+        elif t == "embed":
+            url = re.search(r'src="([^"]+)"', content).group(1)
+            blocks.append({"uid":uid,"type":"embed","payload":{"url":url}})
+        elif t == "csv":
+            m2 = re.search(r'font-size:(\d+)px', content, re.S)
+            c = re.search(r'color:(#[0-9A-Fa-f]{6})', content, re.S).group(1) if "color" in content else "#000"
+            s = int(m2.group(1)) if m2 else 14
+            blocks.append({"uid":uid,"type":"csv","payload":{"csv":"","color":c,"size":s}})
+        elif t == "rich":
+            blocks.append({"uid":uid,"type":"rich","payload":{"content":content}})
+        elif t == "html":
+            blocks.append({"uid":uid,"type":"html","payload":{"content":content}})
     return blocks
 
-# Modified block editing interface
-for i, blk in enumerate(st.session_state["blocks"]):
-    # ... (existing code for block headers)
-    
-    with st.expander("", expanded=st.session_state.get(f"exp_{uid}",False)):
-        if blk["type"] == "text":
-            # Existing text block UI
-        elif blk["type"] == "text_rich":
-            st.subheader("Rich Text Editor")
-            content = st_quill(
-                value=blk["payload"].get("html", ""),
-                key=f"quill_{uid}",
-                toolbar=True,
-                readonly=False
-            )
-            blk["payload"]["html"] = content
-        elif blk["type"] == "text_html":
-            st.subheader("HTML Editor")
-            html_content = st.text_area(
-                "HTML Content",
-                value=blk["payload"].get("html", ""),
-                key=f"html_{uid}",
-                height=300
-            )
-            blk["payload"]["html"] = html_content
-        # ... (rest of the existing block types remain unchanged)
+# ──────────────────────────────────────────────────────────────
+def prime_state(table: str):
+    if "table" not in st.session_state or st.session_state["table"] != table:
+        row = load_row(table)
+        st.session_state["table"]     = table
+        st.session_state["row_id"]    = row.id    if row else None
+        st.session_state["title_raw"] = re.sub(r"<[^>]*>", "", row.title or "") if row else ""
+        st.session_state["blocks"]    = html_to_blocks(row.content) if row else []
+
+# ──────────────────────────────────────────────────────────────
+# Main
+# ──────────────────────────────────────────────────────────────
+st.set_page_config(page_title="Tabbed CMS", layout="wide")
+mode = navigation()
+
+if mode == "Table Editor":
+    tabledit.main()
+else:
+    st.sidebar.header("📑 Content Manager")
+    chosen = st.sidebar.selectbox("Pick a table", TAB_NAMES)
+    prime_state(chosen)
+
+    # Title
+    if st.session_state.get("clear_title_input"):
+        for k in ("title_txt","title_color","title_size","title_raw_html","clear_title_input"):
+            st.session_state.pop(k, None)
+
+    st.subheader("Title")
+    c1,c2,c3 = st.columns([3,1,1])
+    with c1:
+        st.text_input("Text", st.session_state["title_raw"], key="title_txt")
+    with c2:
+        st.color_picker("Color", "#000000", key="title_color")
+    with c3:
+        st.number_input("Size(px)", 8,72,24, key="title_size")
+    raw = st.checkbox("Raw HTML", value=False, key="title_raw_html")
+
+    title_html = (
+        st.session_state["title_txt"] if raw
+        else f'<h2 style="color:{st.session_state["title_color"]};'
+             f'font-size:{st.session_state["title_size"]}px;">'
+             f'{st.session_state["title_txt"]}</h2>'
+    )
+
+    u_col, d_col = st.columns([1,1])
+    with u_col:
+        if st.button("🔄 Update Title"):
+            update_title_db(chosen, title_html)
+            st.success("Title updated.")
+            safe_rerun()
+    with d_col:
+        if st.button("🗑️ Delete Title"):
+            delete_title_db(chosen)
+            st.session_state["clear_title_input"] = True
+            st.success("Title deleted.")
+            safe_rerun()
+
+    st.markdown("---")
+    st.subheader("🧩 Content Blocks")
+    colA, colB = st.columns([3,1])
+    with colA:
+        new_type = st.selectbox("Add block type…", list(BLOCK_TYPES.keys()), key="new_type")
+    with colB:
+        if st.button("➕ Add Block"):
+            uid = str(uuid.uuid4()); t = BLOCK_TYPES[new_type]
+            p = {"content":""} if t in ("rich","html") else {"text":"","color":"#000000","size":16}
+            st.session_state["blocks"].append({"uid":uid,"type":t,"payload":p})
+
+    for i, blk in enumerate(st.session_state["blocks"]):
+        uid = blk["uid"]
+        a,e,u,d = st.columns([6,1,1,1])
+        a.markdown(f"**Block {i+1}: {blk['type']}**")
+        if e.button("🖉 Edit", key=f"edit-{uid}"):
+            st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}",False)
+        if u.button("🔄 Update", key=f"upd-{uid}"):
+            update_content_db(chosen)
+            st.success(f"Block {i+1} saved.")
+            safe_rerun()
+        if d.button("🗑️ Delete", key=f"del-{uid}"):
+            st.session_state["blocks"].pop(i)
+            update_content_db(chosen)
+            st.success(f"Block {i+1} deleted.")
+            safe_rerun()
+
+        with st.expander("", expanded=st.session_state.get(f"exp_{uid}",False)):
+            if blk["type"] == "rich":
+                blk["payload"]["content"] = st_quill(value=blk["payload"]["content"], html=True, key=f"rich_{uid}")
+            elif blk["type"] == "html":
+                blk["payload"]["content"] = st_ace(value=blk["payload"]["content"], language="html", theme="monokai", key=f"html_{uid}")
+            elif blk["type"] == "text":
+                blk["payload"]["text"]  = st.text_area("Text",blk["payload"]["text"],key=f"text_{uid}")
+                blk["payload"]["color"] = st.color_picker("Color",blk["payload"]["color"],key=f"col_{uid}")
+                blk["payload"]["size"]  = st.slider("Size(px)",8,48,blk["payload"]["size"],key=f"size_{uid}")
+
+        st.markdown("")  # exactly one blank line
+
+    if st.button("💾 Save All"):
+        update_content_db(chosen)
+        st.success("All content saved.")
+        safe_rerun()
+
+    st.markdown("---")
+    st.subheader("🔍 Live Preview")
+    st.markdown(title_html, unsafe_allow_html=True)
+    live_html = "<br>".join(p for p in (block_html(b) for b in st.session_state["blocks"]) if p)
+    st.markdown(live_html, unsafe_allow_html=True)
