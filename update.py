@@ -55,18 +55,16 @@ def get_youtube_embed(raw_url: str) -> str:
 
 def block_html(block: dict) -> str:
     t   = block["type"]
-    pld = block["payload"]
-
+    p   = block["payload"]
     if t == "text":
         return (
             f'<!--BLOCK_START:text-->'
-            f'<p style="color:{pld["color"]};font-size:{pld["size"]}px;margin:0">'
-            f'{pld["text"]}</p>'
+            f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">'
+            f'{p["text"]}</p>'
             f'<!--BLOCK_END-->'
         )
-
     if t == "youtube":
-        emb = get_youtube_embed(pld["url"])
+        emb = get_youtube_embed(p["url"])
         return (
             f'<!--BLOCK_START:youtube-->'
             f'<iframe width="560" height="315" src="{emb}" frameborder="0" '
@@ -74,25 +72,22 @@ def block_html(block: dict) -> str:
             f'allowfullscreen></iframe>'
             f'<!--BLOCK_END-->'
         )
-
     if t == "image":
-        url = ensure_https(pld["url"])
+        url = ensure_https(p["url"])
         return (
             f'<!--BLOCK_START:image-->'
             f'<img src="{url}" style="max-width:100%;">'
             f'<!--BLOCK_END-->'
         )
-
     if t == "embed":
-        url = ensure_https(pld["url"])
+        url = ensure_https(p["url"])
         return (
             f'<!--BLOCK_START:embed-->'
             f'<iframe src="{url}" style="width:100%;height:420px;border:none;"></iframe>'
             f'<!--BLOCK_END-->'
         )
-
-    # CSV → robust
-    csv_text = (pld.get("csv") or "").strip()
+    # CSV → robust parsing + styled table
+    csv_text = (p.get("csv") or "").strip()
     if not csv_text:
         return ""
     try:
@@ -106,53 +101,42 @@ def block_html(block: dict) -> str:
     raw = df.to_html(index=False, border=1)
     return (
         f'<!--BLOCK_START:csv-->'
-        f'<div style="color:{pld["color"]};font-size:{pld["size"]}px;">'
+        f'<div style="color:{p["color"]};font-size:{p["size"]}px;">'
         f'{raw}'
         f'</div><!--BLOCK_END-->'
     )
 
-BLOCK_RGX = re.compile(
-    r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S
-)
+BLOCK_RGX = re.compile(r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S)
 
 def html_to_blocks(html: str) -> list[dict]:
     blocks: list[dict] = []
     for m in BLOCK_RGX.finditer(html or ""):
         t, content = m.group("type"), m.group("html")
         uid = str(uuid.uuid4())
-
         if t == "text":
             m2 = re.search(
                 r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px.*?>(.*?)</p>',
-                content,
-                re.S,
+                content, re.S
             )
             if m2:
                 c, s, txt = m2.groups()
-                blocks.append(
-                    {"uid": uid, "type": "text", "payload": {"text": txt, "color": c, "size": int(s)}}
-                )
-
+                blocks.append({"uid":uid,"type":"text","payload":{"text":txt,"color":c,"size":int(s)}})
         elif t == "youtube":
             src = re.search(r'src="([^"]+)"', content).group(1)
             vid = src.split("/")[-1]
             orig = f"https://www.youtube.com/watch?v={vid}"
-            blocks.append({"uid": uid, "type": "youtube", "payload": {"url": orig}})
-
+            blocks.append({"uid":uid,"type":"youtube","payload":{"url":orig}})
         elif t == "image":
             url = re.search(r'src="([^"]+)"', content).group(1)
-            blocks.append({"uid": uid, "type": "image", "payload": {"url": url}})
-
+            blocks.append({"uid":uid,"type":"image","payload":{"url":url}})
         elif t == "embed":
             url = re.search(r'src="([^"]+)"', content).group(1)
-            blocks.append({"uid": uid, "type": "embed", "payload": {"url": url}})
-
+            blocks.append({"uid":uid,"type":"embed","payload":{"url":url}})
         elif t == "csv":
             m2 = re.search(r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px', content, re.S)
             if m2:
                 c, s = m2.groups()
-                blocks.append({"uid": uid, "type": "csv", "payload": {"csv": "", "color": c, "size": int(s)}})
-
+                blocks.append({"uid":uid,"type":"csv","payload":{"csv":"","color":c,"size":int(s)}})
     return blocks
 
 @st.cache_data(show_spinner=False)
@@ -167,7 +151,7 @@ def prime_state(table: str):
         row = load_row(table)
         st.session_state["table"]     = table
         st.session_state["row_id"]    = row.id if row else None
-        st.session_state["title_raw"] = re.sub(r"<[^>]*>", "", row.title) if row else ""
+        st.session_state["title_raw"] = re.sub(r"<[^>]*>", "", row.title or "") if row else ""
         st.session_state["blocks"]    = html_to_blocks(row.content) if row else []
 
 # ──────────────────────────────────────────────────────────────
@@ -176,12 +160,14 @@ mode = navigation()
 
 if mode == "Table Editor":
     tabledit.main()
+
 else:
+    # Sidebar – choose section
     st.sidebar.header("📑 Content Manager")
     chosen = st.sidebar.selectbox("Pick a table", TAB_NAMES)
     prime_state(chosen)
 
-    # — Title editor + Update/Delete —
+    # Title editor + actions
     st.title("✏️ Edit Title")
     c1, c2, c3 = st.columns([3,1,1])
     with c1:
@@ -193,36 +179,40 @@ else:
     raw = st.checkbox("Treat as raw HTML", value=False, key="title_raw_html")
     title_html = title_txt if raw else f'<h2 style="color:{title_color};font-size:{title_size}px;">{title_txt}</h2>'
 
-    col_up, col_del = st.columns([1,1])
-    with col_up:
+    btn1, btn2 = st.columns([1,1])
+    with btn1:
         if st.button("🔄 Update Title", key="upd-title"):
             with engine.begin() as conn:
                 if st.session_state["row_id"]:
                     conn.execute(
-                        text(f"UPDATE {chosen} SET title=:t WHERE id=:id"),
+                        text(f"UPDATE {chosen} SET title = :t WHERE id = :id"),
                         {"t": title_html, "id": st.session_state["row_id"]},
                     )
                 else:
                     conn.execute(
-                        text(f"INSERT INTO {chosen} (title,content) VALUES(:t,'')"),
+                        text(f"INSERT INTO {chosen} (title, content) VALUES (:t, '')"),
                         {"t": title_html},
                     )
             st.success("Title updated.")
             safe_rerun()
-    with col_del:
+    with btn2:
         if st.button("🗑️ Delete Title", key="del-title"):
-            if st.session_state["row_id"]:
-                with engine.begin() as conn:
+            with engine.begin() as conn:
+                if st.session_state["row_id"]:
                     conn.execute(
-                        text(f"UPDATE {chosen} SET title='' WHERE id=:id"),
+                        text(f"UPDATE {chosen} SET title = '' WHERE id = :id"),
                         {"id": st.session_state["row_id"]},
                     )
-            st.session_state["title_raw"] = ""
+                else:
+                    # nothing to delete yet; insert an empty row
+                    conn.execute(
+                        text(f"INSERT INTO {chosen} (title, content) VALUES ('', '')")
+                    )
             st.success("Title deleted.")
             safe_rerun()
 
     st.markdown("---")
-    # — Content Blocks —
+    # Block editor
     st.subheader("🧩 Content Blocks")
     a1, a2 = st.columns([3,1])
     with a1:
@@ -230,53 +220,47 @@ else:
     with a2:
         if st.button("➕ Add Block", key="add"):
             uid = str(uuid.uuid4())
-            t   = BLOCK_TYPES[new_type]
+            typ = BLOCK_TYPES[new_type]
             payload = (
                 {"text":"","color":"#000000","size":16}
-                if t=="text"
-                else {"url":""} if t in ("youtube","image","embed")
+                if typ == "text"
+                else {"url":""} if typ in ("youtube","image","embed")
                 else {"csv":"","color":"#000000","size":16}
             )
-            st.session_state["blocks"].append({"uid":uid,"type":t,"payload":payload})
+            st.session_state["blocks"].append({"uid":uid,"type":typ,"payload":payload})
 
-    # Render blocks with Edit, Update, Delete
     for idx, blk in enumerate(st.session_state["blocks"]):
         uid = blk["uid"]
         colA, colB, colC, colD = st.columns([5,1,1,1])
         colA.markdown(f"**Block {idx+1} – {blk['type']}**")
-
-        # Edit toggle
         if colB.button("🖉 Edit", key=f"edit-{uid}"):
             st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}", False)
-
-        # Update this block
         if colC.button("🔄 Update", key=f"upd-{uid}"):
-            new_blocks = st.session_state["blocks"]
-            full = "".join(block_html(b) for b in new_blocks)
+            full_html = "".join(block_html(b) for b in st.session_state["blocks"])
             with engine.begin() as conn:
                 conn.execute(
-                    text(f"UPDATE {chosen} SET title=:t,content=:c WHERE id=:id"),
-                    {"t": title_html, "c": full, "id": st.session_state["row_id"]},
+                    text(f"UPDATE {chosen} SET title = :t, content = :c WHERE id = :id"),
+                    {
+                        "t": title_html,
+                        "c": full_html,
+                        "id": st.session_state["row_id"],
+                    },
                 )
             st.success(f"Block {idx+1} updated.")
             safe_rerun()
-
-        # Delete this block
         if colD.button("🗑️ Delete", key=f"del-{uid}"):
-            # Remove from state and DB
-            new_blocks = st.session_state["blocks"][:]
-            new_blocks.pop(idx)
-            full = "".join(block_html(b) for b in new_blocks)
+            # persist deletion immediately
+            updated = st.session_state["blocks"].copy()
+            updated.pop(idx)
+            new_html = "".join(block_html(b) for b in updated)
             with engine.begin() as conn:
                 conn.execute(
-                    text(f"UPDATE {chosen} SET title=:t,content=:c WHERE id=:id"),
-                    {"t": title_html, "c": full, "id": st.session_state["row_id"]},
+                    text(f"UPDATE {chosen} SET content = :c WHERE id = :id"),
+                    {"c": new_html, "id": st.session_state["row_id"]},
                 )
-            st.session_state["blocks"] = new_blocks
             st.success(f"Block {idx+1} deleted.")
             safe_rerun()
 
-        # Block editor
         with st.expander("", expanded=st.session_state.get(f"exp_{uid}", False)):
             if blk["type"] == "text":
                 blk["payload"]["text"]  = st.text_area("Text", blk["payload"]["text"], key=f"text_{uid}")
@@ -284,8 +268,8 @@ else:
                 blk["payload"]["size"]  = st.slider("Size(px)", 8,48, blk["payload"]["size"], key=f"size_{uid}")
 
             elif blk["type"] in ("youtube","image","embed"):
-                label = "Image URL" if blk["type"]=="image" else "URL"
-                blk["payload"]["url"]   = st.text_input(label, blk["payload"]["url"], key=f"url_{uid}")
+                lbl = "Image URL" if blk["type"] == "image" else "URL"
+                blk["payload"]["url"]   = st.text_input(lbl, blk["payload"]["url"], key=f"url_{uid}")
 
             else:  # CSV
                 tab1, tab2 = st.tabs(["Upload CSV","Paste CSV"])
@@ -306,34 +290,33 @@ else:
                         st.dataframe(df)
                     except:
                         st.error("Invalid CSV text")
-
                 blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"]["color"], key=f"csv_col_{uid}")
                 blk["payload"]["size"]  = st.slider("Font Size(px)", 8,48, blk["payload"]["size"], key=f"csv_size_{uid}")
 
         st.markdown("---")
 
-    # — Global Save All —
+    # Fallback: Save all at once
     if st.button("💾 Save / Update All", key="save-all"):
         full_html = "".join(block_html(b) for b in st.session_state["blocks"])
         with engine.begin() as conn:
             if st.session_state["row_id"]:
                 conn.execute(
-                    text(f"UPDATE {chosen} SET title=:t,content=:c WHERE id=:id"),
-                    {"t": title_html, "c": full_html, "id": st.session_state["row_id"]},
+                    text(f"UPDATE {chosen} SET title = :t, content = :c WHERE id = :id"),
+                    {
+                        "t": title_html,
+                        "c": full_html,
+                        "id": st.session_state["row_id"],
+                    },
                 )
             else:
                 conn.execute(
-                    text(f"INSERT INTO {chosen} (title,content) VALUES(:t,:c)"),
+                    text(f"INSERT INTO {chosen} (title, content) VALUES (:t, :c)"),
                     {"t": title_html, "c": full_html},
                 )
         st.success("All changes saved.")
         safe_rerun()
 
-    # — Live Preview —
     st.markdown("---")
     st.subheader("🔍 Live Preview")
     st.markdown(title_html, unsafe_allow_html=True)
-    st.markdown(
-        "".join(block_html(b) for b in st.session_state["blocks"]),
-        unsafe_allow_html=True,
-    )
+    st.markdown("".join(block_html(b) for b in st.session_state["blocks"]), unsafe_allow_html=True)
