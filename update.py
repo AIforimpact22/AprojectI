@@ -315,7 +315,7 @@ else:
                 )
             elif blk["type"] == "html":
                 blk["payload"]["content"] = st_ace(
-                    value=blk["payload"]["content"], language="html", theme="monokai", key=f"html_{uid}"
+                    value=blk["payload"]["content"], language="html", theme="dracula", key=f"html_{uid}"
                 )
             elif blk["type"] == "video":
                 blk["payload"]["url"] = st.text_input(
