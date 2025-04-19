@@ -2,7 +2,7 @@
 import streamlit as st
 from utils.db import fetch_content
 
-TABLE_NAME = "w1tab6"   # ← the actual table name in Neon
+TABLE_NAME = "w1tab8"   # ← the actual table name in Neon
 
 def show():
     title_html, content_html = fetch_content(TABLE_NAME)
