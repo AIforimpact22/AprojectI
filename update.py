@@ -27,20 +27,18 @@ def get_engine():
 
 engine = get_engine()
 
-TAB_NAMES   = [
-    "introtab1",
-    "introtab2",
-    "introtab3",
+TAB_NAMES = [
+    "introtab1", "introtab2", "introtab3",
     # Week 1
-    "w1tab1","w1tab2","w1tab3","w1tab4","w1tab5","w1tab6","w1tab7","w1tab8","w1tab9","w1tab10","w1tab11",
+    *[f"w1tab{i}" for i in range(1, 12)],
     # Week 2
-    "w2tab1","w2tab2","w2tab3","w2tab4","w2tab5","w2tab6","w2tab7","w2tab8","w2tab9","w2tab10","w2tab11","w2tab12",
+    *[f"w2tab{i}" for i in range(1, 13)],
     # Week 3
-    "w3tab1","w3tab2","w3tab3","w3tab4","w3tab5","w3tab6","w3tab7","w3tab8","w3tab9","w3tab10","w3tab11","w3tab12",
+    *[f"w3tab{i}" for i in range(1, 13)],
     # Week 4
-    "w4tab1","w4tab2","w4tab3","w4tab4","w4tab5","w4tab6","w4tab7",
+    *[f"w4tab{i}" for i in range(1, 8)],
     # Week 5
-    "w5tab1","w5tab2","w5tab3","w5tab4","w5tab5","w5tab6","w5tab7","w5tab8",
+    *[f"w5tab{i}" for i in range(1, 9)],
 ]
 BLOCK_TYPES = {
     "Text":        "text",
@@ -51,76 +49,128 @@ BLOCK_TYPES = {
     "Video URL":   "video",
 }
 
-# (helper functions omitted for brevity; unchanged) ...
+# Helper functions
 
-# ──────────────────────────────────────────────────────────────
-# Main
-# ──────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Tabbed CMS", layout="wide")
-mode = navigation()
+def ensure_https(u: str) -> str:
+    return u if u.startswith(("http://","https://")) else "https://" + u
 
-if mode == "Table Editor":
-    tabledit.main()
-else:
-    st.sidebar.header("📑 Content Manager")
-    # List pages as buttons instead of dropdown
-    for table_name in TAB_NAMES:
-        if st.sidebar.button(table_name):
-            st.session_state["chosen_table"] = table_name
-            safe_rerun()
 
-    # Default to first page if none selected yet
-    if "chosen_table" not in st.session_state:
-        st.session_state["chosen_table"] = TAB_NAMES[0]
+def load_row(table: str):
+    return engine.connect().execute(
+        text(f"SELECT id, title, content FROM {table} ORDER BY id LIMIT 1")
+    ).fetchone()
 
-    chosen = st.session_state["chosen_table"]
-    prime_state(chosen)
 
-    # Title management (unchanged)
-    if st.session_state.get("clear_title_input"):
-        for k in ("title_txt","title_color","title_size","title_raw_html","clear_title_input"):
-            st.session_state.pop(k, None)
-    st.subheader("Title")
-    c1,c2,c3 = st.columns([3,1,1])
-    with c1:
-        st.text_input("Text", st.session_state["title_raw"], key="title_txt")
-    with c2:
-        st.color_picker("Color", "#000000", key="title_color")
-    with c3:
-        st.number_input("Size(px)", 8,72,24, key="title_size")
-    raw = st.checkbox("Raw HTML", value=False, key="title_raw_html")
-    title_html = (
-        st.session_state["title_txt"] if raw
-        else f'<h2 style="color:{st.session_state["title_color"]};'
-             f'font-size:{st.session_state["title_size"]}px;">'
-             f'{st.session_state["title_txt"]}</h2>'
-    )
-    u_col, d_col = st.columns([1,1])
-    with u_col:
-        if st.button("🔄 Update Title"):
-            update_title_db(chosen, title_html)
-            st.success("Title updated.")
-            safe_rerun()
-    with d_col:
-        if st.button("🗑️ Delete Title"):
-            delete_title_db(chosen)
-            st.session_state["clear_title_input"] = True
-            st.success("Title deleted.")
-            safe_rerun()
+def update_content_db(chosen: str):
+    parts = [block_html(b) for b in st.session_state.get("blocks", []) if block_html(b)]
+    new_html = "<br>".join(parts)
+    if st.session_state.get("row_id"):
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"UPDATE {chosen} SET content = :c WHERE id = :id"),
+                {"c": new_html, "id": st.session_state["row_id"]},
+            )
+    else:
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"INSERT INTO {chosen} (title, content) VALUES ('', :c)"),
+                {"c": new_html},
+            )
+        row = load_row(chosen)
+        st.session_state["row_id"] = row.id if row else None
 
-    st.markdown("---")
-    st.subheader("🧩 Content Blocks")
-    # ... (rest of content-block management unchanged) ...
 
-    if st.button("💾 Save All"):
-        update_content_db(chosen)
-        st.success("All content saved.")
-        safe_rerun()
+def update_title_db(chosen: str, title_html: str):
+    if st.session_state.get("row_id"):
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"UPDATE {chosen} SET title = :t WHERE id = :id"),
+                {"t": title_html, "id": st.session_state["row_id"]},
+            )
+    else:
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"INSERT INTO {chosen} (title, content) VALUES (:t, '')"),
+                {"t": title_html},
+            )
+        row = load_row(chosen)
+        st.session_state["row_id"] = row.id if row else None
 
-    st.markdown("---")
-    st.subheader("🔍 Live Preview")
-    st.markdown(title_html, unsafe_allow_html=True)
-    live_html = "<br>".join(
-        p for p in (block_html(b) for b in st.session_state["blocks"]) if p
-    )
-    st.markdown(live_html, unsafe_allow_html=True)
+
+def delete_title_db(chosen: str):
+    if st.session_state.get("row_id"):
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"UPDATE {chosen} SET title = '' WHERE id = :id"),
+                {"id": st.session_state["row_id"]},
+            )
+
+
+def get_video_embed_html(url: str) -> str:
+    if not url:
+        return ""
+    url = url.strip()
+    # YouTube
+    if re.search(r'(youtu\.be|youtube\.com)', url, re.IGNORECASE):
+        if "youtube.com/embed/" in url:
+            embed_url = url
+        else:
+            m = re.search(r'(?:v=|be/)([^&?/]+)', url)
+            vid = m.group(1) if m else url
+            embed_url = f"https://www.youtube.com/embed/{vid}"
+        return (
+            f'<iframe width="560" height="315" src="{embed_url}" frameborder="0" '
+            f'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" '
+            f'allowfullscreen></iframe>'
+        )
+    # Vimeo
+    elif "vimeo.com" in url:
+        if "player.vimeo.com/video/" in url:
+            src = url
+        else:
+            m = re.search(r'vimeo\.com/(?:.*?/)?([0-9]+)', url)
+            vid = m.group(1) if m else ""
+            src = f"https://player.vimeo.com/video/{vid}"
+        return (
+            f'<iframe width="640" height="360" src="{src}" frameborder="0" '
+            f'allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>'
+        )
+    # Direct video file
+    elif url.lower().endswith((".mp4", ".webm", ".ogg", ".ogv", ".mov")):
+        return (
+            f'<video controls style="max-width:100%;height:auto;" src="{url}">'  
+            "Sorry, your browser doesn't support embedded videos."
+            "</video>"
+        )
+    # Fallback
+    else:
+        return (
+            f'<video controls style="max-width:100%;height:auto;" src="{url}">'  
+            "Sorry, your browser doesn't support embedded videos."
+            "</video>"
+        )
+
+BLOCK_RGX = re.compile(r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S)
+
+def block_html(block: dict) -> str:
+    t, p = block["type"], block["payload"]
+    if t == "text":
+        return (
+            f'<!--BLOCK_START:text-->'
+            f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">'
+            f'{p["text"]}</p><!--BLOCK_END-->'
+        )
+    if t == "image":
+        url = ensure_https(p["url"])
+        return f'<!--BLOCK_START:image--><img src="{url}" style="max-width:100%;"><!--BLOCK_END-->'
+    if t == "csv":
+        txt = (p.get("csv") or "").strip()
+        if not txt:
+            return ""
+        try:
+            df = pd.read_csv(io.StringIO(txt))
+            raw = df.to_html(index=False, border=1)
+        except Exception as e:
+            return f'<!--BLOCK_START:csv--><p style="color:red;">⚠️ {e}</p><!--BLOCK_END-->'
+        return (
+            f'<!--BLOCK_START:csv-->
