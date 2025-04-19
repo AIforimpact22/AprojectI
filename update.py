@@ -277,26 +277,31 @@ else:
 
     st.markdown("---")
     st.subheader("🧩 Content Blocks")
-    colA, colB = st.columns([3,1])
-    with colA:
-        new_type = st.selectbox("Add block type…", list(BLOCK_TYPES.keys()), key="new_type")
-    with colB:
-        if st.button("➕ Add Block"):
+
+    # ◾ Add block types via buttons instead of dropdown
+    st.markdown("**➕ Add a new block:**")
+    btn_cols = st.columns(len(BLOCK_TYPES))
+    for idx, (label, t) in enumerate(BLOCK_TYPES.items()):
+        if btn_cols[idx].button(label):
             uid = str(uuid.uuid4())
-            t = BLOCK_TYPES[new_type]
-            if t in ("rich","html"):
+            if t in ("rich", "html"):
                 p = {"content": ""}
             elif t == "video":
                 p = {"url": ""}
             else:
-                p = {"text":"","color":"#000000","size":16} if t == "text" else {"csv":"","color":"#000000","size":16}
-            st.session_state["blocks"].append({"uid":uid,"type":t,"payload":p})
+                p = (
+                    {"text": "", "color": "#000000", "size": 16}
+                    if t == "text"
+                    else {"csv": "", "color": "#000000", "size": 16}
+                )
+            st.session_state["blocks"].append({"uid": uid, "type": t, "payload": p})
 
+    # ◾ Existing blocks
     for i, blk in enumerate(st.session_state["blocks"]):
         uid = blk["uid"]
-        a,e,u,d = st.columns([6,1,1,1])
+        a, e, u, d = st.columns([6,1,1,1])
         a.markdown(f"**Block {i+1}: {blk['type']}**")
-        if e.button("🖉 Edit",   key=f"edit-{uid}"):
+        if e.button("🖉 Edit", key=f"edit-{uid}"):
             st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}", False)
         if u.button("🔄 Update", key=f"upd-{uid}"):
             update_content_db(chosen)
@@ -322,22 +327,23 @@ else:
                     "Video URL", blk["payload"]["url"], key=f"video_{uid}"
                 )
             elif blk["type"] == "text":
-                blk["payload"]["text"]  = st.text_area(
+                blk["payload"]["text"] = st.text_area(
                     "Text", blk["payload"]["text"], key=f"text_{uid}"
                 )
                 blk["payload"]["color"] = st.color_picker(
                     "Color", "#000000", key=f"col_{uid}"
                 )
-                blk["payload"]["size"]  = st.slider(
+                blk["payload"]["size"] = st.slider(
                     "Size(px)", 8,48, blk["payload"]["size"], key=f"size_{uid}"
                 )
             else:  # csv
-                t1,t2 = st.tabs(["Upload","Paste"])
+                t1, t2 = st.tabs(["Upload", "Paste"])
                 with t1:
                     up = st.file_uploader("CSV", type=["csv"], key=f"file_{uid}")
                     if up:
                         try:
-                            df = pd.read_csv(up); st.dataframe(df)
+                            df = pd.read_csv(up)
+                            st.dataframe(df)
                             blk["payload"]["csv"] = df.to_csv(index=False)
                         except Exception as e:
                             st.error(f"Invalid CSV: {e}")
@@ -345,13 +351,18 @@ else:
                     txt = st.text_area("CSV text", blk["payload"]["csv"], key=f"csv_{uid}")
                     blk["payload"]["csv"] = txt
                     try:
-                        pd.read_csv(io.StringIO(txt)); st.dataframe(pd.read_csv(io.StringIO(txt)))
+                        pd.read_csv(io.StringIO(txt))
+                        st.dataframe(pd.read_csv(io.StringIO(txt)))
                     except:
                         st.error("Invalid CSV")
-                blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"]["color"], key=f"csv_col_{uid}")
-                blk["payload"]["size"]  = st.slider("Font Size(px)", 8,48, blk["payload"]["size"], key=f"csv_size_{uid}")
+                blk["payload"]["color"] = st.color_picker(
+                    "Text Color", blk["payload"]["color"], key=f"csv_col_{uid}"
+                )
+                blk["payload"]["size"] = st.slider(
+                    "Font Size(px)", 8,48, blk["payload"]["size"], key=f"csv_size_{uid}"
+                )
 
-        st.markdown("")  # exactly one blank line
+        st.markdown("")  # blank line
 
     if st.button("💾 Save All"):
         update_content_db(chosen)
