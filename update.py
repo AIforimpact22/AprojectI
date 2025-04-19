@@ -89,7 +89,7 @@ def get_video_embed_html(url: str) -> str:
             f'<iframe width="640" height="360" src="{src}" frameborder="0" '
             f'allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>'
         )
-    # Direct video
+    # Direct video file
     elif url.lower().endswith((".mp4", ".webm", ".ogg", ".ogv", ".mov")):
         return (
             f'<video controls style="max-width:100%;height:auto;" src="{url}">'
@@ -103,6 +103,69 @@ def get_video_embed_html(url: str) -> str:
             "Sorry, your browser doesn't support embedded videos."
             "</video>"
         )
+
+def block_html(block: dict) -> str:
+    t, p = block["type"], block["payload"]
+    if t == "text":
+        return (
+            f'<!--BLOCK_START:text-->'
+            f'<p style="color:{p["color"]};font-size:{p["size"]}px;margin:0">'
+            f'{p["text"]}</p><!--BLOCK_END-->'
+        )
+    if t == "image":
+        url = ensure_https(p["url"])
+        return f'<!--BLOCK_START:image--><img src="{url}" style="max-width:100%;"><!--BLOCK_END-->'
+    if t == "csv":
+        txt = (p.get("csv") or "").strip()
+        if not txt:
+            return ""
+        try:
+            df = pd.read_csv(io.StringIO(txt))
+            raw = df.to_html(index=False, border=1)
+        except Exception as e:
+            return f'<!--BLOCK_START:csv--><p style="color:red;">⚠️ {e}</p><!--BLOCK_END-->'
+        return (
+            f'<!--BLOCK_START:csv-->'
+            f'<div style="color:{p["color"]};font-size:{p["size"]}px;">'
+            f'{raw}</div><!--BLOCK_END-->'
+        )
+    if t == "rich":
+        return f'<!--BLOCK_START:rich-->{p["content"]}<!--BLOCK_END-->'
+    if t == "html":
+        return f'<!--BLOCK_START:html--><pre>{p["content"]}</pre><!--BLOCK_END-->'
+    if t == "video":
+        embed = get_video_embed_html(p["url"])
+        return f'<!--BLOCK_START:video-->{embed}<!--BLOCK_END-->'
+    return ""
+
+BLOCK_RGX = re.compile(r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S)
+
+def html_to_blocks(html: str) -> list[dict]:
+    blocks: list[dict] = []
+    for m in BLOCK_RGX.finditer(html or ""):
+        t, content = m.group("type"), m.group("html")
+        uid = str(uuid.uuid4())
+        if t == "text":
+            m2 = re.search(r'color:(#[0-9A-Fa-f]{6});font-size:(\d+)px.*?>(.*?)</p>', content, re.S)
+            if m2:
+                c, s, txt = m2.groups()
+                blocks.append({"uid":uid,"type":"text","payload":{"text":txt,"color":c,"size":int(s)}})
+        elif t == "image":
+            url = re.search(r'src="([^"]+)"', content).group(1)
+            blocks.append({"uid":uid,"type":"image","payload":{"url":url}})
+        elif t == "csv":
+            m2 = re.search(r'font-size:(\d+)px', content, re.S)
+            c = re.search(r'color:(#[0-9A-Fa-f]{6})', content, re.S).group(1) if "color" in content else "#000"
+            s = int(m2.group(1)) if m2 else 14
+            blocks.append({"uid":uid,"type":"csv","payload":{"csv":"","color":c,"size":s}})
+        elif t == "rich":
+            blocks.append({"uid":uid,"type":"rich","payload":{"content":content}})
+        elif t == "html":
+            blocks.append({"uid":uid,"type":"html","payload":{"content":content}})
+        elif t == "video":
+            src = re.search(r'src="([^"]+)"', content).group(1)
+            blocks.append({"uid":uid,"type":"video","payload":{"url":src}})
+    return blocks
 
 def load_row(table: str):
     return engine.connect().execute(
@@ -151,16 +214,8 @@ def delete_title_db(chosen: str):
                 {"id": st.session_state["row_id"]},
             )
 
-BLOCK_RGX = re.compile(r"<!--BLOCK_START:(?P<type>[a-z]+?)-->(?P<html>.*?)<!--BLOCK_END-->", re.S)
-
-def html_to_blocks(html: str) -> list[dict]:
-    # ... (same as before)
-    # [Copy-paste your full html_to_blocks implementation here]
-    return []
-
 def prime_state(table: str):
-    """Initialize session_state for the chosen table."""
-    if st.session_state.get("table") != table:
+    if "table" not in st.session_state or st.session_state["table"] != table:
         row = load_row(table)
         st.session_state["table"]     = table
         st.session_state["row_id"]    = row.id    if row else None
@@ -168,29 +223,32 @@ def prime_state(table: str):
         st.session_state["blocks"]    = html_to_blocks(row.content) if row else []
 
 # ──────────────────────────────────────────────────────────────
+# Main
+# ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Tabbed CMS", layout="wide")
 mode = navigation()
 
 if mode == "Table Editor":
     tabledit.main()
 else:
-    # --- sidebar as buttons ---
+    # Sidebar: list pages as buttons
     st.sidebar.header("📑 Content Manager")
-    # initialize default if not set
-    if "chosen_table" not in st.session_state:
-        st.session_state["chosen_table"] = TAB_NAMES[0]
-
+    if "chosen" not in st.session_state:
+        st.session_state["chosen"] = TAB_NAMES[0]
     for tbl in TAB_NAMES:
         if st.sidebar.button(tbl, key=f"btn_{tbl}"):
-            st.session_state["chosen_table"] = tbl
+            st.session_state["chosen"] = tbl
             safe_rerun()
 
-    chosen = st.session_state["chosen_table"]
+    chosen = st.session_state["chosen"]
     prime_state(chosen)
 
-    # --- Title section (unchanged) ---
+    # === Title section (unchanged) ===
     st.subheader("Title")
-    c1, c2, c3 = st.columns([3,1,1])
+    if st.session_state.get("clear_title_input"):
+        for k in ("title_txt","title_color","title_size","title_raw_html","clear_title_input"):
+            st.session_state.pop(k, None)
+    c1,c2,c3 = st.columns([3,1,1])
     with c1:
         st.text_input("Text", st.session_state["title_raw"], key="title_txt")
     with c2:
@@ -218,10 +276,88 @@ else:
             safe_rerun()
 
     st.markdown("---")
-    # --- Content blocks section (unchanged) ---
-    # copy in your existing block-add/edit/delete logic here...
+    st.subheader("🧩 Content Blocks")
+    colA, colB = st.columns([3,1])
+    with colA:
+        new_type = st.selectbox("Add block type…", list(BLOCK_TYPES.keys()), key="new_type")
+    with colB:
+        if st.button("➕ Add Block"):
+            uid = str(uuid.uuid4())
+            t = BLOCK_TYPES[new_type]
+            if t in ("rich","html"):
+                p = {"content": ""}
+            elif t == "video":
+                p = {"url": ""}
+            else:
+                p = {"text":"","color":"#000000","size":16} if t == "text" else {"csv":"","color":"#000000","size":16}
+            st.session_state["blocks"].append({"uid":uid,"type":t,"payload":p})
 
-    # --- Live preview (unchanged) ---
+    for i, blk in enumerate(st.session_state["blocks"]):
+        uid = blk["uid"]
+        a,e,u,d = st.columns([6,1,1,1])
+        a.markdown(f"**Block {i+1}: {blk['type']}**")
+        if e.button("🖉 Edit",   key=f"edit-{uid}"):
+            st.session_state[f"exp_{uid}"] = not st.session_state.get(f"exp_{uid}", False)
+        if u.button("🔄 Update", key=f"upd-{uid}"):
+            update_content_db(chosen)
+            st.success(f"Block {i+1} saved.")
+            safe_rerun()
+        if d.button("🗑️ Delete", key=f"del-{uid}"):
+            st.session_state["blocks"].pop(i)
+            update_content_db(chosen)
+            st.success(f"Block {i+1} deleted.")
+            safe_rerun()
+
+        with st.expander("", expanded=st.session_state.get(f"exp_{uid}", False)):
+            if blk["type"] == "rich":
+                blk["payload"]["content"] = st_quill(
+                    value=blk["payload"]["content"], html=True, key=f"rich_{uid}"
+                )
+            elif blk["type"] == "html":
+                blk["payload"]["content"] = st_ace(
+                    value=blk["payload"]["content"], language="html", theme="monokai", key=f"html_{uid}"
+                )
+            elif blk["type"] == "video":
+                blk["payload"]["url"] = st.text_input(
+                    "Video URL", blk["payload"]["url"], key=f"video_{uid}"
+                )
+            elif blk["type"] == "text":
+                blk["payload"]["text"]  = st.text_area(
+                    "Text", blk["payload"]["text"], key=f"text_{uid}"
+                )
+                blk["payload"]["color"] = st.color_picker(
+                    "Color", blk["payload"]["color"], key=f"col_{uid}"
+                )
+                blk["payload"]["size"]  = st.slider(
+                    "Size(px)", 8,48, blk["payload"]["size"], key=f"size_{uid}"
+                )
+            else:  # csv
+                t1,t2 = st.tabs(["Upload","Paste"])
+                with t1:
+                    up = st.file_uploader("CSV", type=["csv"], key=f"file_{uid}")
+                    if up:
+                        try:
+                            df = pd.read_csv(up); st.dataframe(df)
+                            blk["payload"]["csv"] = df.to_csv(index=False)
+                        except Exception as e:
+                            st.error(f"Invalid CSV: {e}")
+                with t2:
+                    txt = st.text_area("CSV text", blk["payload"]["csv"], key=f"csv_{uid}")
+                    blk["payload"]["csv"] = txt
+                    try:
+                        pd.read_csv(io.StringIO(txt)); st.dataframe(pd.read_csv(io.StringIO(txt)))
+                    except:
+                        st.error("Invalid CSV")
+                blk["payload"]["color"] = st.color_picker("Text Color", blk["payload"]["color"], key=f"csv_col_{uid}")
+                blk["payload"]["size"]  = st.slider("Font Size(px)", 8,48, blk["payload"]["size"], key=f"csv_size_{uid}")
+
+        st.markdown("")  # exactly one blank line
+
+    if st.button("💾 Save All"):
+        update_content_db(chosen)
+        st.success("All content saved.")
+        safe_rerun()
+
     st.markdown("---")
     st.subheader("🔍 Live Preview")
     st.markdown(title_html, unsafe_allow_html=True)
