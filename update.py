@@ -326,7 +326,7 @@ else:
                     "Text", blk["payload"]["text"], key=f"text_{uid}"
                 )
                 blk["payload"]["color"] = st.color_picker(
-                    "Color", blk["payload"]["color"], key=f"col_{uid}"
+                    "Color", "#000000", key=f"col_{uid}"
                 )
                 blk["payload"]["size"]  = st.slider(
                     "Size(px)", 8,48, blk["payload"]["size"], key=f"size_{uid}"
