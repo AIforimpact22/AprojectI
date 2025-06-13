@@ -1,4 +1,4 @@
-# login.py - Manages user authentication, registration, and password recovery
+# login.py – user authentication + registration (MySQL only, no GitHub backup)
 import streamlit as st
 import mysql.connector
 from mysql.connector import errorcode, IntegrityError
@@ -8,11 +8,10 @@ import datetime
 
 from database import create_tables
 from theme import apply_dark_theme
-from github_sync import push_db_to_github  # unchanged, still called after registration
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Helpers                                                                     │
+# DB helper                                                                    │
 # ──────────────────────────────────────────────────────────────────────────────
 def _get_conn():
     cfg = st.secrets["mysql"]
@@ -26,6 +25,9 @@ def _get_conn():
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Email helper                                                                 │
+# ──────────────────────────────────────────────────────────────────────────────
 def send_password_email(recipient_email, username, password):
     """
     Sends an email with the user's password using TLS on port 587.
@@ -173,8 +175,6 @@ def show_login_create_account():
                     st.error("⚠️ Username or Password already exists. Choose a different one.")
                 else:
                     st.success("✅ Account created! Please wait for admin approval before logging in.")
-                    # still push the (possibly obsolete) db file if your workflow needs it
-                    push_db_to_github(st.secrets["general"]["db_path"])
             else:
                 st.error("⚠️ Please fill out all fields.")
 
