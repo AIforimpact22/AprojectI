@@ -32,7 +32,6 @@ _WEEK_COLORS = {1: "#27c93f", 2: "#0ff", 3: "#b19cd9", 4: "#ffbd2e", 5: "#f44"}
 # ───────────────────────────────────────────────────────────────
 
 def _fetch_participants():
-    """Return list of dicts with full progress info + join date."""
     query = (
         "SELECT u.fullname, u.username, u.date_of_joining, "
         "       p.week1track, p.week2track, p.week3track, p.week4track, p.week5track "
@@ -49,7 +48,7 @@ def _fetch_participants():
                 rows.append({
                     "fullname": fullname or username,
                     "username": username,
-                    "doj": doj,  # datetime.date
+                    "doj": doj,
                     "percent": percent,
                     "weeks": weeks,
                 })
@@ -58,11 +57,11 @@ def _fetch_participants():
     return sorted(rows, key=lambda r: (-r["percent"], r["fullname"]))
 
 # ───────────────────────────────────────────────────────────────
-# Build HTML
+# Build HTML helpers
 # ───────────────────────────────────────────────────────────────
 
 _HTML_TEMPLATE = """
-<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>Participants</title><style>@import url('https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;700&display=swap');:root{--bg:#0a0a12;--green:#0f0;--cyan:#0ff;--purple:#b19cd9;--glow:rgba(0,255,0,.7);--text-shadow:0 0 8px var(--glow);}*{margin:0;padding:0;box-sizing:border-box;}body{background:#000;font-family:'Inconsolata',monospace;display:flex;justify-content:center;align-items:center;min-height:100vh;} .terminal{width:90%;max-width:850px;height:80vh;background:var(--bg);border:1px solid var(--green);border-radius:8px;box-shadow:0 0 25px rgba(0,255,0,.5),inset 0 0 10px rgba(0,255,0,.2);padding:20px;overflow:auto;color:#e0e0e0;text-shadow:var(--text-shadow);} .title{color:var(--cyan);margin-bottom:15px;} .participant{margin:10px 0;} .bar{display:inline-block;height:14px;min-width:30px;background:linear-gradient(to right,var(--green),var(--cyan));box-shadow:0 0 5px var(--glow);} .weeks{margin-left:25px;font-size:0.8rem;line-height:1.4;} .wbar{display:inline-block;height:10px;margin-left:4px;vertical-align:middle;box-shadow:0 0 3px var(--glow);} .doj{font-size:0.75rem;color:var(--purple);} </style></head><body><div class=\"terminal\"><h3 class=\"title\">Participants Progress</h3>{{ROWS}}</div></body></html>"""
+<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>Participants</title><style>@import url('https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;700&display=swap');:root{--bg:#0a0a12;--green:#0f0;--cyan:#0ff;--purple:#b19cd9;--glow:rgba(0,255,0,.7);--text-shadow:0 0 8px var(--glow);}*{margin:0;padding:0;box-sizing:border-box;}body{background:#000;font-family:'Inconsolata',monospace;display:flex;justify-content:center;align-items:center;min-height:100vh;} .terminal{width:90%;max-width:850px;height:80vh;background:var(--bg);border:1px solid var(--green);border-radius:8px;box-shadow:0 0 25px rgba(0,255,0,.5),inset 0 0 10px rgba(0,255,0,.2);padding:20px;overflow:auto;color:#e0e0e0;text-shadow:var(--text-shadow);} .title{color:var(--cyan);margin-bottom:15px;} .participant{margin:10px 0;} .bar{display:inline-block;height:14px;min-width:30px;background:linear-gradient(to right,var(--green),var(--cyan));box-shadow:0 0 5px var(--glow);} .weeks{margin-left:25px;font-size:0.8rem;line-height:1.4;} .wbar{display:inline-block;height:10px;margin-left:4px;vertical-align:middle;box-shadow:0 0 3px var(--glow);} hr{border:0;border-top:1px solid var(--green);opacity:0.3;margin:6px 0;} .doj{font-size:0.75rem;color:var(--purple);} </style></head><body><div class=\"terminal\"><h3 class=\"title\">Participants Progress</h3>{{ROWS}}</div></body></html>"""
 
 
 def _week_bar(week_num, done):
@@ -79,20 +78,23 @@ def _week_bar(week_num, done):
 def _build_rows(parts):
     if not parts:
         return "<p>No participants found.</p>"
-    lines = []
-    for p in parts:
+    rows = []
+    for idx, p in enumerate(parts):
         bar_w = max(5, p["percent"])
         doj_txt = p["doj"].strftime("%Y-%m-%d") if isinstance(p["doj"], (date,)) else p["doj"] or "N/A"
         header = (
             f'<div class="participant">'
             f'<span style="color:var(--green);">{p["fullname"]}</span>'
-            f' <span class="doj">(Joined: {doj_txt})</span><br>'
-            f'{p["percent"]}% <span class="bar" style="width:{bar_w}%;"></span>'
+            f' <span class="doj">({doj_txt})</span> — {p["percent"]}% '
+            f'<span class="bar" style="width:{bar_w}%;"></span>'
             f'</div>'
         )
         weeks_html = " ".join(_week_bar(w, c) for w, c in p["weeks"].items() if _REQUIRED_TABS[w])
-        lines.append(header + f'<div class="weeks">{weeks_html}</div>')
-    return "\n".join(lines)
+        block = header + f'<div class="weeks">{weeks_html}</div>'
+        rows.append(block)
+        if idx < len(parts) - 1:
+            rows.append("<hr>")  # separator line
+    return "\n".join(rows)
 
 # ───────────────────────────────────────────────────────────────
 # Streamlit entrypoint
@@ -100,9 +102,8 @@ def _build_rows(parts):
 
 def show():
     st.set_page_config(page_title="Participants", layout="wide")
-    parts = _fetch_participants()
-    html_content = _HTML_TEMPLATE.replace("{{ROWS}}", _build_rows(parts))
-    box_h = min(900, 240 + len(parts) * 44)
+    html_content = _HTML_TEMPLATE.replace("{{ROWS}}", _build_rows(_fetch_participants()))
+    box_h = min(900, 240 + len(_fetch_participants()) * 44)
     html(html_content, height=box_h, scrolling=True)
 
 if __name__ == "__main__":
