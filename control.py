@@ -1,7 +1,7 @@
-# control.py – Admin Control Panel for User Approvals (MySQL edition)
+# control.py – Admin Control Panel for User Approvals (MySQL, keyed by username)
 import streamlit as st
 import mysql.connector
-from mysql.connector import IntegrityError
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DB helper                                                                    │
@@ -38,32 +38,34 @@ def admin_login():
 def get_pending_users():
     """
     Return a list of tuples:
-        (rowid, fullname, email, phone, username)
+        (username, fullname, email, phone)
     where approved == 0
     """
     conn = _get_conn()
     cur  = conn.cursor()
     cur.execute(
         """
-        SELECT id, fullname, email, phone, username
+        SELECT username, fullname, email, phone
         FROM users
         WHERE approved = 0
-        """)
+        """
+    )
     pending = cur.fetchall()
     conn.close()
     return pending
 
-def update_user_approval(rowid, new_status):
+
+def update_user_approval(username, new_status):
     """
-    Set approved = new_status for the given user id.
+    Set approved = new_status for the given username.
     new_status:  1  → approved
                 -1  → rejected
     """
     conn = _get_conn()
     cur  = conn.cursor()
     cur.execute(
-        "UPDATE users SET approved = %s WHERE id = %s",
-        (new_status, rowid)
+        "UPDATE users SET approved = %s WHERE username = %s",
+        (new_status, username)
     )
     conn.commit()
     conn.close()
@@ -78,20 +80,20 @@ def show_admin_panel():
     pending_users = get_pending_users()
     if pending_users:
         for user in pending_users:
-            rowid, fullname, email, phone, username = user
+            username, fullname, email, phone = user
             st.markdown(f"**Name:** {fullname} (*{username}*)")
             st.markdown(f"**Email:** {email}")
             st.markdown(f"**Phone:** {phone}")
 
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("Approve", key=f"approve_{rowid}"):
-                    update_user_approval(rowid, 1)
+                if st.button("Approve", key=f"approve_{username}"):
+                    update_user_approval(username, 1)
                     st.success(f"User {username} has been approved.")
                     st.experimental_rerun()
             with col2:
-                if st.button("Reject", key=f"reject_{rowid}"):
-                    update_user_approval(rowid, -1)
+                if st.button("Reject", key=f"reject_{username}"):
+                    update_user_approval(username, -1)
                     st.error(f"User {username} has been rejected.")
                     st.experimental_rerun()
             st.markdown("---")
