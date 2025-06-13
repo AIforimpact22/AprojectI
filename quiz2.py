@@ -1,8 +1,23 @@
 import streamlit as st
-import sqlite3
-from github_sync import push_db_to_github  # Optional: if you use GitHub sync
+import mysql.connector
 
-# Quiz Questions and Points remain unchanged
+# ──────────────────────────────────────────────────────────────────────────────
+# DB helper – reads [mysql] block from secrets.toml
+# ──────────────────────────────────────────────────────────────────────────────
+def _get_conn():
+    cfg = st.secrets["mysql"]
+    return mysql.connector.connect(
+        host=cfg["host"],
+        port=int(cfg.get("port", 3306)),
+        user=cfg["user"],
+        password=cfg["password"],
+        database=cfg["database"],
+        autocommit=False,
+    )
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Quiz content
+# ──────────────────────────────────────────────────────────────────────────────
 questions = [
     {
         "question": "Splitting a script into multiple smaller scripts helps make the code more manageable and easier to debug.",
@@ -23,214 +38,145 @@ questions = [
 
 MAX_ATTEMPTS = 1
 
+# ──────────────────────────────────────────────────────────────────────────────
+# UI helpers
+# ──────────────────────────────────────────────────────────────────────────────
 def add_custom_css():
-    st.markdown("""
+    st.markdown(
+        """
         <style>
-        /* Modern container styling with blue shine border and pale orange background */
-        .question-container {
-            background-color: #FFEFD5; /* Pale orange background */
-            border: 2px solid #007BFF; /* Blue border */
-            border-radius: 12px;
-            padding: 24px;
-            margin: 16px 0;
-            box-shadow: 0 0 8px #007BFF; /* Blue shine effect */
-        }
-        
-        /* Question text styling */
-        .question-text {
-            font-size: 1.1em;
-            color: #1f1f1f;
-            line-height: 1.5;
-            margin-bottom: 20px;
-        }
-        
-        /* Custom radio button styling */
-        .stRadio > div {
-            display: flex;
-            gap: 12px;
-        }
-        
-        .stRadio > div > label {
-            flex: 1;
-            background-color: #f8f9fa;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            padding: 12px 24px;
-            text-align: center;
-            transition: all 0.2s ease;
-            cursor: pointer;
-            font-weight: 500;
-            color: #495057;
-            min-width: 120px;
-        }
-        
-        .stRadio > div > label:hover {
-            background-color: #e9ecef;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        
-        /* Hide default radio button */
-        .stRadio input {
-            position: absolute;
-            opacity: 0;
-            cursor: pointer;
-        }
-        
-        /* Selected state styling changed to green */
-        .stRadio > div > label[data-checked="true"] {
-            background-color: #28a745;
-            color: white;
-            border-color: #28a745;
-        }
-        
-        /* Remove default streamlit label */
-        .stRadio > label {
-            display: none !important;
-        }
-        
-        /* Hide default help text icon */
-        .stRadio > div > div > span {
-            display: none !important;
-        }
+        .question-container{background-color:#FFEFD5;border:2px solid #007BFF;
+            border-radius:12px;padding:24px;margin:16px 0;box-shadow:0 0 8px #007BFF;}
+        .question-text{font-size:1.1em;color:#1f1f1f;line-height:1.5;margin-bottom:20px;}
+        .stRadio>div{display:flex;gap:12px;}
+        .stRadio>div>label{flex:1;background-color:#f8f9fa;border:2px solid #e9ecef;
+            border-radius:8px;padding:12px 24px;text-align:center;transition:all .2s ease;
+            cursor:pointer;font-weight:500;color:#495057;min-width:120px;}
+        .stRadio>div>label:hover{background-color:#e9ecef;transform:translateY(-2px);
+            box-shadow:0 4px 6px rgba(0,0,0,.05);}
+        .stRadio input{position:absolute;opacity:0;cursor:pointer;}
+        .stRadio>div>label[data-checked="true"]{background-color:#28a745;color:#fff;border-color:#28a745;}
+        .stRadio>label{display:none!important;}
+        .stRadio>div>div>span{display:none!important;}
         </style>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
-def validate_username(username):
+# ──────────────────────────────────────────────────────────────────────────────
+# Validation & DB helpers
+# ──────────────────────────────────────────────────────────────────────────────
+def validate_username(username: str):
     """
-    Validates that the username exists in the records table.
-    Returns a tuple (is_valid, quiz_submitted, record) where:
-      - is_valid is True if the user exists.
-      - quiz_submitted is True if a grade is already recorded for quiz2.
-      - record is the database record.
+    Check if the username exists and whether quiz2 was already submitted.
+    Returns (is_valid, quiz_already_submitted).
     """
     try:
-        db_path = st.secrets["general"]["db_path"]
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT quiz2 FROM records WHERE username = ?", (username,))
-        record = cursor.fetchone()
-        conn.close()
-        if record is None:
-            return (False, False, None)
-        # If quiz2 is not None, the quiz was already submitted.
-        quiz_submitted = record[0] is not None
-        return (True, quiz_submitted, record)
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT quiz2 FROM records WHERE username = %s", (username,))
+            row = cur.fetchone()
+        if row is None:
+            return False, False
+        return True, row[0] is not None
     except Exception as e:
         st.error(f"Error validating username: {e}")
-        return (False, False, None)
+        return False, False
 
+def save_score(username: str, score: int):
+    """
+    Update quiz2 score for the given username.
+    """
+    try:
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("UPDATE records SET quiz2 = %s WHERE username = %s", (score, username))
+            conn.commit()
+            return cur.rowcount > 0
+    except Exception as e:
+        st.error(f"Error saving grade: {e}")
+        return False
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Main UI
+# ──────────────────────────────────────────────────────────────────────────────
 def show():
     add_custom_css()
-    
     st.title("Quiz 2: Python and Script Management")
-    
-    # Step 1: Enter Username with pale blue text
-    with st.container():
-        st.markdown("<h2 style='color: #ADD8E6;'>Step 1: Enter Your Username</h2>", unsafe_allow_html=True)
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            username = st.text_input("Username", placeholder="Enter your username")
-        with col2:
-            verify_button = st.button("Verify Username")
-    
-    if "validated" not in st.session_state:
-        st.session_state["validated"] = False
-        
-    if verify_button:
-        is_valid, quiz_submitted, _ = validate_username(username)
-        if is_valid:
-            if quiz_submitted:
-                st.error("❌ You have already submitted this quiz.")
-                st.session_state["validated"] = False
-            else:
-                st.success("✅ Username validated. You can proceed with the quiz.")
-                st.session_state["validated"] = True
-                st.session_state["username"] = username
-        else:
+
+    # Step 1 · username
+    st.markdown("<h2 style='color:#ADD8E6;'>Step 1: Enter Your Username</h2>", unsafe_allow_html=True)
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        username = st.text_input("Username", placeholder="Enter your username")
+    with col2:
+        verify = st.button("Verify Username")
+
+    if verify:
+        valid, submitted = validate_username(username)
+        if not valid:
             st.error("❌ Invalid username. Please use a registered username.")
-            st.session_state["validated"] = False
+            st.session_state["validated_q2"] = False
+        elif submitted:
+            st.error("❌ You have already submitted this quiz.")
+            st.session_state["validated_q2"] = False
+        else:
+            st.success("✅ Username validated. You can proceed with the quiz.")
+            st.session_state["validated_q2"] = True
+            st.session_state["username_q2"] = username
 
-    # Check if user is validated and allowed to take the quiz
-    if st.session_state.get("validated", False):
-        # Use a separate session key for quiz2 attempts
-        if "quiz2_attempts" not in st.session_state:
-            st.session_state["quiz2_attempts"] = 0
+    # Ensure state keys exist
+    st.session_state.setdefault("quiz2_attempts", 0)
+    st.session_state.setdefault("user_answers_q2", [None] * len(questions))
 
-        # Prevent multiple submissions per session
+    # Step 2 · questions
+    if st.session_state.get("validated_q2", False):
         if st.session_state["quiz2_attempts"] >= MAX_ATTEMPTS:
             st.error("❌ You have reached the maximum number of attempts for this quiz.")
             return
 
-        # Step 2: Answer Questions with pale blue text
-        st.markdown("<h2 style='color: #ADD8E6;'>Step 2: Answer the Questions</h2>", unsafe_allow_html=True)
-
-        if "user_answers_quiz2" not in st.session_state:
-            st.session_state["user_answers_quiz2"] = [None] * len(questions)
-
-        # Display quiz questions with improved UI
-        for i, question in enumerate(questions):
+        st.markdown("<h2 style='color:#ADD8E6;'>Step 2: Answer the Questions</h2>", unsafe_allow_html=True)
+        for i, q in enumerate(questions):
             with st.container():
-                st.markdown(f"""
-                    <div class="question-container">
-                        <div class="question-text">
-                            Q{i+1}: {question['question']}
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                answer = st.radio(
-                    "",  # Empty label
-                    options=["True", "False"],
-                    key=f"question_quiz2_{i}",
-                    horizontal=True,
-                    label_visibility="collapsed"
+                st.markdown(
+                    f"<div class='question-container'><div class='question-text'>Q{i+1}: {q['question']}</div></div>",
+                    unsafe_allow_html=True,
                 )
-                st.session_state["user_answers_quiz2"][i] = answer == "True"
+                ans = st.radio(
+                    "",
+                    options=["True", "False"],
+                    key=f"quiz2_q{i}",
+                    horizontal=True,
+                    label_visibility="collapsed",
+                )
+                st.session_state["user_answers_q2"][i] = ans == "True"
 
-        # Submit Button with improved styling
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            submit_button = st.button(
-                "Submit Quiz",
-                type="primary",
-                use_container_width=True,
-            )
+        # Submit
+        col_mid = st.columns([1, 2, 1])[1]
+        with col_mid:
+            if st.button("Submit Quiz", use_container_width=True):
+                if None in st.session_state["user_answers_q2"]:
+                    st.error("❌ Please answer all questions before submitting.")
+                    return
 
-        if submit_button:
-            if None in st.session_state["user_answers_quiz2"]:
-                st.error("❌ Please answer all questions before submitting.")
-                return
+                score = sum(
+                    q["points"] for i, q in enumerate(questions)
+                    if st.session_state["user_answers_q2"][i] == q["answer"]
+                )
 
-            score = sum(
-                question["points"]
-                for i, question in enumerate(questions)
-                if st.session_state["user_answers_quiz2"][i] == question["answer"]
-            )
+                # Increment attempts
+                st.session_state["quiz2_attempts"] += 1
 
-            st.session_state["quiz2_attempts"] += 1
-            
-            # Display score with progress bar
-            st.markdown("### Quiz Results")
-            st.progress(score / 100)
-            st.success(f"📊 Your score: {score}/100")
+                # Show result
+                st.markdown("### Quiz Results")
+                st.progress(score / 100)
+                st.success(f"📊 Your score: {score}/100")
 
-            # Update grade in the database (quiz2 column) using the verified username
-            db_path = st.secrets["general"]["db_path"]
-            try:
-                conn = sqlite3.connect(db_path)
-                cursor = conn.cursor()
-                cursor.execute("UPDATE records SET quiz2 = ? WHERE username = ?", (score, st.session_state["username"]))
-                conn.commit()
-                if cursor.rowcount == 0:
-                    st.error("Grade update failed: No matching record found in the database. Please verify your username and database schema.")
-                else:
+                # Save to DB
+                if save_score(st.session_state["username_q2"], score):
                     st.success("Grade successfully saved.")
-                    # Optional: push the updated DB to GitHub
-                    push_db_to_github(db_path)
-                conn.close()
-            except Exception as e:
-                st.error(f"Error saving grade: {e}")
+                else:
+                    st.error("Grade update failed—please check username or database.")
 
 if __name__ == "__main__":
     show()
