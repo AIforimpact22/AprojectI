@@ -68,7 +68,7 @@ _HTML_TEMPLATE = """
 def _week_bar(w, done):
     req = _REQUIRED_TABS.get(w, 1) or 1
     pct = min(100, round(done / req * 100))
-    color = _ WEEK_COLORS.get(w, "#00d4ff")
+    color = _WEEK_COLORS.get(w, "#00d4ff")
     return (f'<div class="w-item" style="border-left-color:{color};">'
             f'<span class="w-lbl" style="color:{color};">W{w}</span>'
             f'<div class="w-prog"><div class="w-bar" style="background:{color};width:{pct}%;"></div></div>'
