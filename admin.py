@@ -1,12 +1,15 @@
-# admin.py – streamlined MySQL admin dashboard
+# admin.py – read-only admin dashboard (MySQL backend)
 import streamlit as st
-import mysql.connector
 import pandas as pd
+import mysql.connector
+from mysql.connector import Error
+
 
 # ──────────────────────────────────────────────────────────────────────────────
-# DB helper
+# Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 def _get_conn():
+    """Connect to the MySQL database using [mysql] in secrets.toml"""
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
         host=cfg["host"],
@@ -17,26 +20,57 @@ def _get_conn():
         autocommit=False,
     )
 
-def _load_df(table):
-    conn = _get_conn()
-    df   = pd.read_sql(f"SELECT * FROM {table}", conn)
-    conn.close()
-    return df
 
-def _toggle_approval(username, approve: bool):
+def _fetch_progress():
+    """
+    Returns a pandas DataFrame with:
+      username · fullname · week1 … week5 · total_tabs · percent_complete
+    """
     conn = _get_conn()
-    cur  = conn.cursor()
-    cur.execute(
-        "UPDATE users SET approved = %s WHERE username = %s",
-        (1 if approve else 0, username),
+    q = """
+        SELECT p.username,
+               p.fullname,
+               p.week1track, p.week2track, p.week3track, p.week4track, p.week5track
+        FROM progress AS p
+        ORDER BY p.fullname
+    """
+    df = pd.read_sql(q, conn)
+
+    # calculate totals (assumes week1 max 10, week2 max 12, week3 max 12, week4 max 12, week5 max 7)
+    week_max = {1: 10, 2: 12, 3: 12, 4: 12, 5: 7}
+    df["total_tabs"] = (
+        df["week1track"] + df["week2track"] + df["week3track"] +
+        df["week4track"] + df["week5track"]
     )
-    conn.commit()
+    max_possible = sum(week_max.values())
+    df["percent_complete"] = (df["total_tabs"] / max_possible * 100).round(1)
     conn.close()
+    return df, max_possible
+
+
+def _style_df(df):
+    def _bg(val, divisor):
+        pct = 0 if divisor == 0 else val / divisor
+        shade = int(255 - pct * 155)  # dark→light
+        return f"background-color: rgb({shade},{shade},{shade})"
+
+    styled = df.style
+    for wk in range(1, 6):
+        styled = styled.applymap(
+            lambda v, _div=wk: _bg(v, {1:10,2:12,3:12,4:12,5:7}[_div]),
+            subset=[f"week{wk}track"],
+        )
+    styled = styled.bar(
+        subset=["percent_complete"],
+        color="#4CAF50"
+    )
+    return styled
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Admin authentication
 # ──────────────────────────────────────────────────────────────────────────────
-def admin_login():
+def _admin_login():
     if "admin_logged_in" not in st.session_state:
         st.session_state["admin_logged_in"] = False
 
@@ -45,65 +79,34 @@ def admin_login():
         u = st.text_input("Admin Username")
         p = st.text_input("Admin Password", type="password")
         if st.button("Login"):
-            if (
-                u == st.secrets["admin"]["username"]
-                and p == st.secrets["admin"]["password"]
-            ):
+            if u == st.secrets["admin"]["username"] and p == st.secrets["admin"]["password"]:
                 st.session_state["admin_logged_in"] = True
-                st.success("Logged in as admin!")
+                st.success("Logged in!")
             else:
                 st.error("Invalid credentials.")
     return st.session_state["admin_logged_in"]
 
+
 # ──────────────────────────────────────────────────────────────────────────────
-# Dashboard
+# Main app
 # ──────────────────────────────────────────────────────────────────────────────
-if admin_login():
-    st.title("Minimal Admin Dashboard (MySQL)")
+if _admin_login():
+    st.title("Participant Progress Overview")
 
-    st.sidebar.header("Navigation")
-    nav = st.sidebar.radio(
-        "Choose view",
-        ["Users", "Records", "Progress"],
-        key="nav_choice",
-    )
+    df, max_possible = _fetch_progress()
 
-    # ---------- USERS --------------------------------------------------------
-    if nav == "Users":
-        st.subheader("All Users")
+    # search/filter
+    search = st.text_input("Filter by name or username").lower().strip()
+    if search:
+        df = df[
+            df["fullname"].str.lower().str.contains(search) |
+            df["username"].str.lower().str.contains(search)
+        ]
 
-        df_users = _load_df("users")
-        st.dataframe(df_users, use_container_width=True)
+    st.subheader(f"Total participants: {len(df)}")
+    styled_df = _style_df(df)
+    st.dataframe(styled_df, use_container_width=True)
 
-        # Approval toggles
-        pending = df_users[df_users["approved"] != 1]
-        if not pending.empty:
-            st.markdown("### Pending Approvals")
-            for _, row in pending.iterrows():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**{row['username']}** – {row['fullname']} ({row['email']})")
-                with col2:
-                    if st.button("Approve", key=f"approve_{row['username']}"):
-                        _toggle_approval(row["username"], True)
-                        st.experimental_rerun()
-
-    # ---------- RECORDS ------------------------------------------------------
-    elif nav == "Records":
-        st.subheader("Assignment / Quiz Scores")
-
-        df_records = _load_df("records")
-        st.dataframe(df_records, use_container_width=True)
-
-        csv = df_records.to_csv(index=False).encode()
-        st.download_button("Download CSV", csv, "records.csv", "text/csv")
-
-    # ---------- PROGRESS -----------------------------------------------------
-    elif nav == "Progress":
-        st.subheader("Weekly Progress")
-
-        df_prog = _load_df("progress")
-        st.dataframe(df_prog, use_container_width=True)
-
-        csv = df_prog.to_csv(index=False).encode()
-        st.download_button("Download CSV", csv, "progress.csv", "text/csv")
+    # downloadable CSV
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("Download CSV", csv, "progress.csv", "text/csv")
