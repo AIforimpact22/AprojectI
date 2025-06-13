@@ -1,4 +1,4 @@
-# theme.py – Manages dark theme for the entire app (now styles Date-of-Joining picker)
+# theme.py – unified dark theme (Date-of-Joining picker shows BLACK date text)
 import streamlit as st
 
 
@@ -18,33 +18,40 @@ def apply_dark_theme():
         .stSelectbox > label,
         .stDateInput  > label,
         .stButton     > button {
-            color: #FFA500 !important;   /* orange */
+            color: #FFA500 !important;
             font-weight: bold;
         }
 
         /* ─────────── COMMON INPUT BOX STYLE ─────────── */
         .stTextInput,
         .stSelectbox,
-        .stDateInput  > div,   /* wrapper div of date picker */
-        .stButton     > button {
+        .stButton > button {
             background-color: #000000 !important;
             color: #ffffff !important;
-            border: 1px solid #808080 !important;   /* grey */
+            border: 1px solid #808080 !important;
             border-radius: 8px !important;
             padding: 10px;
             box-shadow: 0 0 5px rgba(128,128,128,0.5);
         }
 
-        /* inner <input> of date picker */
-        .stDateInput input {
+        /* ─────────── DATE PICKER (light grey box, black text) ─────────── */
+        .stDateInput > div {                     /* outer wrapper */
+            background-color: #d3d3d3 !important;  /* light grey */
+            color: #000000 !important;             /* black text */
+            border: 1px solid #808080 !important;
+            border-radius: 8px !important;
+            padding: 10px;
+            box-shadow: 0 0 5px rgba(128,128,128,0.5);
+        }
+        .stDateInput input {                     /* actual input element */
             background-color: transparent !important;
-            color: #ffffff !important;
+            color: #000000 !important;             /* black date */
             border: none !important;
         }
 
         /* ─────────── BUTTON HOVER ─────────── */
         .stButton > button:hover {
-            background-color: #d3d3d3 !important;  /* light grey */
+            background-color: #d3d3d3 !important;
             color: #000000 !important;
             transition: 0.3s ease-in-out;
         }
@@ -79,7 +86,7 @@ def apply_dark_theme():
         }
         [data-testid="stSidebar"] div { color: #ffffff !important; }
 
-        /* sidebar menu item */
+        /* sidebar menu items */
         .css-1d391kg, .css-18e3th9 { color: #ffffff !important; }
         .css-1d391kg:hover, .css-18e3th9:hover {
             background-color: #d3d3d3 !important;
@@ -91,7 +98,7 @@ def apply_dark_theme():
         /* ─────────── SCROLLBAR ─────────── */
         ::-webkit-scrollbar        { width: 8px; }
         ::-webkit-scrollbar-track  { background: #000000; }
-        ::-webkit-scrollbar-thumb  { background: #808080; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb  { background-color: #808080; border-radius: 10px; }
         </style>
         """,
         unsafe_allow_html=True,
