@@ -6,7 +6,6 @@ from home import show_home
 from style import show_footer
 from importlib import import_module
 from github_progress import get_user_progress
-import sqlite3
 import sys
 import os
 
