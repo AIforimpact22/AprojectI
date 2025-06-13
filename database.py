@@ -29,7 +29,7 @@ def create_tables():
             phone           BIGINT,
             username        VARCHAR(50)  UNIQUE,
             password        VARCHAR(100),
-            date_of_joining DATE         DEFAULT CURRENT_DATE,
+            date_of_joining DATE,
             approved        TINYINT      DEFAULT 0
         )
         """,
