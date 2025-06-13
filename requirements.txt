@@ -1,0 +1,12 @@
+streamlit
+streamlit-option-menu
+streamlit-folium
+requests
+pandas
+geopy
+folium
+matplotlib
+pillow
+PyGithub
+pillow
+openpyxl
