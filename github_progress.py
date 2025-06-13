@@ -1,79 +1,125 @@
-import json
-from github import Github
+# github_progress.py  – now backed by MySQL, no GitHub token needed
 import streamlit as st
+import mysql.connector
+from mysql.connector import IntegrityError
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DB helper                                                                    │
+# ──────────────────────────────────────────────────────────────────────────────
+def _get_conn():
+    cfg = st.secrets["mysql"]
+    return mysql.connector.connect(
+        host=cfg["host"],
+        port=int(cfg.get("port", 3306)),
+        user=cfg["user"],
+        password=cfg["password"],
+        database=cfg["database"],
+        autocommit=False,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Compatibility stubs (load/save no longer needed)                            │
+# ──────────────────────────────────────────────────────────────────────────────
 def load_github_progress():
-    """
-    Loads the user_progress.json file from the repository.
-    If the file is not found (404), creates an empty progress file and returns it.
-    Returns a tuple: (progress_data, contents) where contents is a ContentFile object.
-    """
-    token = st.secrets["github"]["token"]
-    repo_name = st.secrets["github"]["repository"]
-    file_path = st.secrets["github"]["file_path"]
+    """Stub kept for backward-compat imports; returns (None, None)."""
+    return {}, None
 
-    g = Github(token)
-    repo = g.get_repo(repo_name)
-    
-    try:
-        contents = repo.get_contents(file_path)
-        progress_data = json.loads(contents.decoded_content.decode())
-    except Exception as e:
-        if "Not Found" in str(e):
-            # File does not exist: create an empty progress file.
-            progress_data = {}
-            commit_message = "Create initial progress file"
-            new_content = json.dumps(progress_data, indent=4)
-            repo.create_file(file_path, commit_message, new_content)
-            # Retrieve the newly created file.
-            contents = repo.get_contents(file_path)
-        else:
-            st.error(f"Error loading progress file: {e}")
-            progress_data = {}
-            contents = None
-    return progress_data, contents
 
 def save_github_progress(progress_data, contents):
-    """
-    Commits the updated progress_data (a Python dict) back to the repository.
-    """
-    token = st.secrets["github"]["token"]
-    repo_name = st.secrets["github"]["repository"]
-    file_path = st.secrets["github"]["file_path"]
+    """Stub kept for backward-compat imports; now a no-op."""
+    pass
 
-    g = Github(token)
-    repo = g.get_repo(repo_name)
 
-    new_content = json.dumps(progress_data, indent=4)
-    commit_message = "Update user progress"
-    try:
-        repo.update_file(contents.path, commit_message, new_content, contents.sha)
-    except Exception as e:
-        st.error(f"Error saving progress file: {e}")
-
+# ──────────────────────────────────────────────────────────────────────────────
+# Core API (same signatures as before)                                         │
+# ──────────────────────────────────────────────────────────────────────────────
 def get_user_progress(username):
     """
-    Returns the progress dictionary for the given username.
-    If the user doesn't exist, initializes with default values.
-    Example: { "week1": 1, "week2": 0, "week3": 0, "week4": 0, "week5": 0 }
+    Returns a dict like
+      { "week1": int, "week2": int, ..., "week5": int }
+    creating a fresh row with defaults if the user isn't present.
     """
-    progress_data, _ = load_github_progress()
-    if username not in progress_data:
-        progress_data[username] = {"week1": 1, "week2": 0, "week3": 0, "week4": 0, "week5": 0}
-        # Save the new default progress immediately.
-        _, contents = load_github_progress()
-        save_github_progress(progress_data, contents)
-    return progress_data[username]
+    conn = _get_conn()
+    cur  = conn.cursor(dictionary=True)
+
+    cur.execute(
+        """
+        SELECT week1track, week2track, week3track, week4track, week5track
+        FROM progress
+        WHERE username = %s
+        """,
+        (username,),
+    )
+    row = cur.fetchone()
+
+    if row is None:
+        # Insert a new progress row with week1 unlocked (1) and others 0
+        try:
+            cur.execute(
+                """
+                INSERT INTO progress
+                    (username, fullname, week1track, week2track, week3track, week4track, week5track)
+                VALUES (%s, %s, 1, 0, 0, 0, 0)
+                """,
+                (username, username),   # fullname fallback = username
+            )
+            conn.commit()
+            row = {
+                "week1track": 1,
+                "week2track": 0,
+                "week3track": 0,
+                "week4track": 0,
+                "week5track": 0,
+            }
+        except IntegrityError:
+            conn.rollback()
+            # retry select in rare race condition
+            cur.execute(
+                """
+                SELECT week1track, week2track, week3track, week4track, week5track
+                FROM progress
+                WHERE username = %s
+                """,
+                (username,),
+            )
+            row = cur.fetchone()
+
+    conn.close()
+
+    # Map DB column names → original keys expected by calling code
+    return {
+        "week1": row["week1track"],
+        "week2": row["week2track"],
+        "week3": row["week3track"],
+        "week4": row["week4track"],
+        "week5": row["week5track"],
+    }
+
 
 def update_user_progress(username, week, new_tab_index):
     """
-    Update the progress for the user in the specified week.
-    Only updates if new_tab_index is greater than the current value.
+    Update progress if new_tab_index is greater than the stored value.
+    `week` is 1-5.
     """
-    progress_data, contents = load_github_progress()
-    user_prog = progress_data.get(username, {"week1": 1, "week2": 0, "week3": 0, "week4": 0, "week5": 0})
-    key = f"week{week}"
-    if new_tab_index > user_prog.get(key, 0):
-        user_prog[key] = new_tab_index
-    progress_data[username] = user_prog
-    save_github_progress(progress_data, contents)
+    column = f"week{week}track"
+    conn   = _get_conn()
+    cur    = conn.cursor()
+
+    # Check current value first
+    cur.execute(
+        f"SELECT {column} FROM progress WHERE username = %s",
+        (username,),
+    )
+    row = cur.fetchone()
+    current = row[0] if row else 0
+
+    if new_tab_index > current:
+        cur.execute(
+            f"UPDATE progress SET {column} = %s WHERE username = %s",
+            (new_tab_index, username),
+        )
+        conn.commit()
+
+    conn.close()
