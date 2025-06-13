@@ -335,13 +335,13 @@ def _week_bar(week_num, done):
 
 def _build_rows(parts):
     if not parts:
-        return '<div class="no-data">No participants found.</div>'
+        return "<p>No participants found.</p>"
     
     total_participants = len(parts)
     avg_completion = sum(p["percent"] for p in parts) / total_participants if parts else 0
     stats = f"👥 {total_participants} participants | 📊 {avg_completion:.1f}% avg completion"
     
-    rows_html = []
+    out = []
     for idx, p in enumerate(parts, 1):
         overall_width = max(5, p["percent"])
         
@@ -352,26 +352,24 @@ def _build_rows(parts):
             if _REQUIRED_TABS[w] > 0
         )
         
-        participant_html = f'''
-        <div class="participant">
-            <div class="rank-indicator">#{idx}</div>
-            <div class="participant-header">
-                <div class="participant-name">{p["fullname"]}</div>
-                <div class="completion-badge">
-                    <span class="percentage">{p["percent"]}%</span>
-                    <div class="overall-bar">
-                        <div class="overall-progress" style="width: {overall_width}%;"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="weeks-container">
-                {weeks_html}
-            </div>
-        </div>'''
+        participant_html = (
+            f'<div class="participant">'
+            f'<div class="rank-indicator">#{idx}</div>'
+            f'<div class="participant-header">'
+            f'<div class="participant-name">{p["fullname"]}</div>'
+            f'<div class="completion-badge">'
+            f'<span class="percentage">{p["percent"]}%</span>'
+            f'<div class="overall-bar">'
+            f'<div class="overall-progress" style="width: {overall_width}%;"></div>'
+            f'</div></div></div>'
+            f'<div class="weeks-container">{weeks_html}</div>'
+            f'</div>'
+        )
         
-        rows_html.append(participant_html)
+        out.append(participant_html)
     
-    return _HTML_TEMPLATE.replace("{{STATS}}", stats).replace("{{ROWS}}", "\n".join(rows_html))
+    # Return the complete HTML with stats and rows
+    return _HTML_TEMPLATE.replace("{{STATS}}", stats).replace("{{ROWS}}", "\n".join(out))
 
 # ───────────────────────────────────────────────────────────────
 # Streamlit entrypoint
@@ -384,3 +382,6 @@ def show():
     # Height adjusts dynamically, cap at 900px
     box_h = min(900, 300 + len(parts) * 60)
     html(html_content, height=box_h, scrolling=True)
+
+if __name__ == "__main__":
+    show()
