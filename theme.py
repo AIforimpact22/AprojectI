@@ -1,4 +1,4 @@
-# theme.py – Dark theme for the entire app (date-picker fully matched)
+# theme.py – Dark theme for the entire app (date picker now fully matched)
 import streamlit as st
 
 def apply_dark_theme():
@@ -23,19 +23,18 @@ def apply_dark_theme():
 
         /* ───────────────────── COMMON INPUT CONTAINERS ────────────────────── */
         .stTextInput, .stSelectbox, .stButton > button,
-        /* Date picker outer container */
-        [data-testid="stDateInput"] > div {
-            background-color: #000000 !important;      /* Black */
+        [data-testid="stDateInput"] > div {               /* date picker wrapper */
+            background-color: #000000 !important;
             color: #ffffff !important;
-            border: 1px solid #808080 !important;      /* Grey border */
+            border: 1px solid #808080 !important;         /* Grey border */
             border-radius: 8px !important;
             padding: 10px !important;
-            box-shadow: 0 0 5px rgba(128,128,128,0.5); /* Grey glow */
+            box-shadow: 0 0 5px rgba(128,128,128,0.5);    /* Grey glow */
         }
 
         /* ─────── Inner <input> of the date picker (text in the box) ───────── */
         [data-testid="stDateInput"] input {
-            background-color: transparent !important;
+            background-color: #000000 !important;         /* solid black */
             color: #ffffff !important;
             border: none !important;
         }
@@ -87,9 +86,7 @@ def apply_dark_theme():
             color: #ffffff !important;
             border-right: 1px solid #808080 !important;
         }
-        [data-testid="stSidebar"] div {
-            color: #ffffff !important;
-        }
+        [data-testid="stSidebar"] div { color: #ffffff !important; }
 
         /* Sidebar menu items */
         .css-1d391kg, .css-18e3th9 { color: #ffffff !important; }
