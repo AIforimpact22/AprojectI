@@ -1,4 +1,5 @@
 streamlit
+mysql-connector-python
 streamlit-option-menu
 streamlit-folium
 requests
