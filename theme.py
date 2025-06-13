@@ -1,92 +1,97 @@
-# theme.py – unified dark theme (Date-of-Joining picker shows BLACK date text)
+# theme.py – Dark theme for the entire app (date-picker fully matched)
 import streamlit as st
-
 
 def apply_dark_theme():
     st.markdown(
-        """
+        '''
         <style>
-        /* ─────────── GLOBAL BACKGROUND & TEXT ─────────── */
+        /* ─────────────────────────── GLOBAL COLORS ─────────────────────────── */
         html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"],
         .block-container, .stApp {
             background-color: #000000 !important;
             color: #ffffff !important;
         }
 
-        /* ─────────── LABELS (orange & bold) ─────────── */
+        /* ────────────────────────── INPUT LABELS ───────────────────────────── */
         .stTextInput > label,
         .stSelectbox > label,
-        .stDateInput  > label,
-        .stButton     > button {
-            color: #FFA500 !important;
+        [data-testid="stDateInput"] > label,
+        .stButton > button {
+            color: #FFA500 !important;          /* Orange */
             font-weight: bold;
         }
 
-        /* ─────────── COMMON INPUT BOX STYLE ─────────── */
-        .stTextInput,
-        .stSelectbox,
-        .stButton > button {
-            background-color: #000000 !important;
+        /* ───────────────────── COMMON INPUT CONTAINERS ────────────────────── */
+        .stTextInput, .stSelectbox, .stButton > button,
+        /* Date picker outer container */
+        [data-testid="stDateInput"] > div {
+            background-color: #000000 !important;      /* Black */
             color: #ffffff !important;
-            border: 1px solid #808080 !important;
+            border: 1px solid #808080 !important;      /* Grey border */
             border-radius: 8px !important;
-            padding: 10px;
-            box-shadow: 0 0 5px rgba(128,128,128,0.5);
+            padding: 10px !important;
+            box-shadow: 0 0 5px rgba(128,128,128,0.5); /* Grey glow */
         }
 
-        /* ─────────── DATE PICKER (light grey box, black text) ─────────── */
-        .stDateInput > div {                     /* outer wrapper */
-            background-color: #d3d3d3 !important;  /* light grey */
-            color: #000000 !important;             /* black text */
-            border: 1px solid #808080 !important;
-            border-radius: 8px !important;
-            padding: 10px;
-            box-shadow: 0 0 5px rgba(128,128,128,0.5);
-        }
-        .stDateInput input {                     /* actual input element */
+        /* ─────── Inner <input> of the date picker (text in the box) ───────── */
+        [data-testid="stDateInput"] input {
             background-color: transparent !important;
-            color: #000000 !important;             /* black date */
+            color: #ffffff !important;
             border: none !important;
         }
 
-        /* ─────────── BUTTON HOVER ─────────── */
+        /* ─────────── Calendar-icon button inside the date picker ──────────── */
+        [data-testid="stDateInput"] button {
+            background-color: #000000 !important;
+            border: none !important;
+            color: #ffffff !important;
+        }
+        [data-testid="stDateInput"] button:hover {
+            background-color: #d3d3d3 !important;  /* Light gray */
+            color: #000000 !important;
+            transition: 0.3s ease-in-out;
+        }
+
+        /* ───────────────────────── BUTTON HOVER (other buttons) ───────────── */
         .stButton > button:hover {
             background-color: #d3d3d3 !important;
             color: #000000 !important;
             transition: 0.3s ease-in-out;
         }
 
-        /* ─────────── TABS STYLE ─────────── */
+        /* ────────────────────────── TABS STYLING ──────────────────────────── */
         div[data-testid="stTabs"] button {
-            border: 1px solid #808080 !important;
             border-radius: 50px !important;
             padding: 10px 20px !important;
             font-weight: bold !important;
             color: #ffffff !important;
             background-color: #000000 !important;
+            border: 1px solid #808080 !important;
         }
         div[data-testid="stTabs"] button[aria-selected="true"] {
             background-color: #d3d3d3 !important;
             color: #000000 !important;
         }
 
-        /* ─────────── ERROR TEXT ─────────── */
+        /* ─────────────────────── ERROR TEXT STYLE ─────────────────────────── */
         .error-text {
             color: #FF0000 !important;
-            font-weight: bold;
-            font-size: 16px;
+            font-weight: bold !important;
+            font-size: 16px !important;
             padding: 5px;
         }
 
-        /* ─────────── SIDEBAR ─────────── */
+        /* ─────────────────────── SIDEBAR THEME ────────────────────────────── */
         [data-testid="stSidebar"], .sidebar-content {
             background-color: #000000 !important;
             color: #ffffff !important;
             border-right: 1px solid #808080 !important;
         }
-        [data-testid="stSidebar"] div { color: #ffffff !important; }
+        [data-testid="stSidebar"] div {
+            color: #ffffff !important;
+        }
 
-        /* sidebar menu items */
+        /* Sidebar menu items */
         .css-1d391kg, .css-18e3th9 { color: #ffffff !important; }
         .css-1d391kg:hover, .css-18e3th9:hover {
             background-color: #d3d3d3 !important;
@@ -95,11 +100,14 @@ def apply_dark_theme():
             transition: 0.3s ease-in-out;
         }
 
-        /* ─────────── SCROLLBAR ─────────── */
-        ::-webkit-scrollbar        { width: 8px; }
-        ::-webkit-scrollbar-track  { background: #000000; }
-        ::-webkit-scrollbar-thumb  { background-color: #808080; border-radius: 10px; }
+        /* ───────────────────── CUSTOM SCROLLBAR ───────────────────────────── */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #000000; }
+        ::-webkit-scrollbar-thumb {
+            background-color: #808080;
+            border-radius: 10px;
+        }
         </style>
-        """,
-        unsafe_allow_html=True,
+        ''',
+        unsafe_allow_html=True
     )
