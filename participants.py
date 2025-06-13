@@ -23,7 +23,7 @@ def _get_conn():
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _fetch_progress():
-    caps = {1: 10, 2: 12, 3: 12, 4: 12, 5: 7}  # full‑completion counts per week
+    caps = {1: 10, 2: 12, 3: 12, 4: 12, 5: 7}  # full-completion counts per week
     with _get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -59,7 +59,7 @@ def show():
         st.info("No approved participants yet.")
         return
 
-    # Pass data to the client‑side via JSON embedded in the HTML.
+    # Pass data to the client-side via JSON embedded in the HTML.
     json_data = json.dumps(data)
     cell = 22  # px for each square (incl. small padding)
     chart_height = len(data) * cell + 40
@@ -98,9 +98,9 @@ def show():
     g.selectAll('g')
       .data(data)
       .join('g')
-        .attr('transform', (d, i) => `translate(0,${i * cell})`)
+        .attr('transform', (d, i) => `translate(0,${{i * cell}})`)
       .selectAll('rect')
-      .data(d => d.progress.map((v, w) => ({v, w})))
+      .data(d => d.progress.map((v, w) => ({{v, w}})))
       .join('rect')
         .attr('x', d => d.w * cell + 2)
         .attr('y', 2)
@@ -108,16 +108,16 @@ def show():
         .attr('height', cell - 4)
         .attr('fill', d => color(d.v))
       .append('title')
-        .text(d => `Week ${d.w + 1}: ${(d.v * 100).toFixed(0)}%`);
+        .text(d => `Week ${{d.w + 1}}: ${{(d.v * 100).toFixed(0)}}%`);
 
     // Week labels along the bottom
     svg.append('g')
-      .attr('transform', `translate(150,${data.length * cell + 5})`)
+      .attr('transform', `translate(150,${{data.length * cell + 5}})`)
       .selectAll('text')
       .data(d3.range(1, weeks + 1))
       .join('text')
         .attr('x', (d) => (d - 1) * cell + 2)
-        .text(d => `W${d}`);
+        .text(d => `W${{d}}`);
     </script>
     """
 
