@@ -1,4 +1,4 @@
-# theme.py – Dark theme for the entire app (date picker now fully matched)
+# theme.py – Dark theme for the entire app (date text now black)
 import streamlit as st
 
 def apply_dark_theme():
@@ -23,23 +23,24 @@ def apply_dark_theme():
 
         /* ───────────────────── COMMON INPUT CONTAINERS ────────────────────── */
         .stTextInput, .stSelectbox, .stButton > button,
-        [data-testid="stDateInput"] > div {               /* date picker wrapper */
-            background-color: #000000 !important;
+        /* Date picker outer container */
+        [data-testid="stDateInput"] > div {
+            background-color: #000000 !important;      /* Black */
             color: #ffffff !important;
-            border: 1px solid #808080 !important;         /* Grey border */
+            border: 1px solid #808080 !important;      /* Grey border */
             border-radius: 8px !important;
             padding: 10px !important;
-            box-shadow: 0 0 5px rgba(128,128,128,0.5);    /* Grey glow */
+            box-shadow: 0 0 5px rgba(128,128,128,0.5); /* Grey glow */
         }
 
-        /* ─────── Inner <input> of the date picker (text in the box) ───────── */
+        /* ─────── Inner <input> of the date picker (TEXT NOW BLACK) ───────── */
         [data-testid="stDateInput"] input {
-            background-color: #000000 !important;         /* solid black */
-            color: #ffffff !important;
+            background-color: transparent !important;
+            color: #000000 !important;                /* changed from white */
             border: none !important;
         }
 
-        /* ─────────── Calendar-icon button inside the date picker ──────────── */
+        /* ─────────── Calendar-icon button inside the date picker ─────────── */
         [data-testid="stDateInput"] button {
             background-color: #000000 !important;
             border: none !important;
@@ -51,14 +52,14 @@ def apply_dark_theme():
             transition: 0.3s ease-in-out;
         }
 
-        /* ───────────────────────── BUTTON HOVER (other buttons) ───────────── */
+        /* ───────────────────────── BUTTON HOVER (other buttons) ──────────── */
         .stButton > button:hover {
             background-color: #d3d3d3 !important;
             color: #000000 !important;
             transition: 0.3s ease-in-out;
         }
 
-        /* ────────────────────────── TABS STYLING ──────────────────────────── */
+        /* ────────────────────────── TABS STYLING ─────────────────────────── */
         div[data-testid="stTabs"] button {
             border-radius: 50px !important;
             padding: 10px 20px !important;
@@ -72,7 +73,7 @@ def apply_dark_theme():
             color: #000000 !important;
         }
 
-        /* ─────────────────────── ERROR TEXT STYLE ─────────────────────────── */
+        /* ─────────────────────── ERROR TEXT STYLE ────────────────────────── */
         .error-text {
             color: #FF0000 !important;
             font-weight: bold !important;
@@ -80,13 +81,15 @@ def apply_dark_theme():
             padding: 5px;
         }
 
-        /* ─────────────────────── SIDEBAR THEME ────────────────────────────── */
+        /* ─────────────────────── SIDEBAR THEME ───────────────────────────── */
         [data-testid="stSidebar"], .sidebar-content {
             background-color: #000000 !important;
             color: #ffffff !important;
             border-right: 1px solid #808080 !important;
         }
-        [data-testid="stSidebar"] div { color: #ffffff !important; }
+        [data-testid="stSidebar"] div {
+            color: #ffffff !important;
+        }
 
         /* Sidebar menu items */
         .css-1d391kg, .css-18e3th9 { color: #ffffff !important; }
