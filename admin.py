@@ -1,13 +1,12 @@
-# admin.py – Advanced Admin Dashboard (now MySQL only, no GitHub push)
+# admin.py – streamlined MySQL admin dashboard
 import streamlit as st
 import mysql.connector
-from mysql.connector import Error, IntegrityError
-import json, pandas as pd
+import pandas as pd
 
 # ──────────────────────────────────────────────────────────────────────────────
-# DB helper                                                                    │
+# DB helper
 # ──────────────────────────────────────────────────────────────────────────────
-def get_connection():
+def _get_conn():
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
         host=cfg["host"],
@@ -18,39 +17,24 @@ def get_connection():
         autocommit=False,
     )
 
-# Schema helper – INFORMATION_SCHEMA.COLUMNS
-def get_table_schema(table):
-    try:
-        conn = get_connection(); cur = conn.cursor(dictionary=True)
-        cur.execute(
-            """
-            SELECT COLUMN_NAME AS name,
-                   COLUMN_TYPE AS type,
-                   IS_NULLABLE = 'NO' AS notnull,
-                   COLUMN_KEY = 'PRI' AS pk
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE() AND table_name = %s
-            ORDER BY ORDINAL_POSITION
-            """,
-            (table,),
-        )
-        schema = cur.fetchall()
-        conn.close()
-        return schema
-    except Error as e:
-        st.error(f"Error fetching schema for {table}: {e}")
-        return []
-
-# List user tables (skip information_schema / mysql)
-def list_tables():
-    conn = get_connection(); cur = conn.cursor()
-    cur.execute("SHOW TABLES")
-    tables = [row[0] for row in cur.fetchall()]
+def _load_df(table):
+    conn = _get_conn()
+    df   = pd.read_sql(f"SELECT * FROM {table}", conn)
     conn.close()
-    return tables
+    return df
+
+def _toggle_approval(username, approve: bool):
+    conn = _get_conn()
+    cur  = conn.cursor()
+    cur.execute(
+        "UPDATE users SET approved = %s WHERE username = %s",
+        (1 if approve else 0, username),
+    )
+    conn.commit()
+    conn.close()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Admin login                                                                  │
+# Admin authentication
 # ──────────────────────────────────────────────────────────────────────────────
 def admin_login():
     if "admin_logged_in" not in st.session_state:
@@ -61,7 +45,10 @@ def admin_login():
         u = st.text_input("Admin Username")
         p = st.text_input("Admin Password", type="password")
         if st.button("Login"):
-            if u == st.secrets["admin"]["username"] and p == st.secrets["admin"]["password"]:
+            if (
+                u == st.secrets["admin"]["username"]
+                and p == st.secrets["admin"]["password"]
+            ):
                 st.session_state["admin_logged_in"] = True
                 st.success("Logged in as admin!")
             else:
@@ -69,218 +56,54 @@ def admin_login():
     return st.session_state["admin_logged_in"]
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Main dashboard                                                               │
+# Dashboard
 # ──────────────────────────────────────────────────────────────────────────────
 if admin_login():
-    st.title("Advanced Admin Dashboard (MySQL)")
-    with st.sidebar:
-        nav = st.radio(
-            "Navigation",
-            [
-                "Execute SQL",
-                "View Schema",
-                "Create Table",
-                "Drop Table",
-                "Insert Row",
-                "Edit Row",
-                "Delete Row",
-                "Alter Table",
-                "View User Progress",
-            ],
-        )
+    st.title("Minimal Admin Dashboard (MySQL)")
 
-    # 1 ─ Execute arbitrary SQL ------------------------------------------------
-    if nav == "Execute SQL":
-        st.subheader("Execute SQL")
-        sql = st.text_area("Enter SQL command")
-        if st.button("Run"):
-            try:
-                conn = get_connection(); cur = conn.cursor(dictionary=True)
-                cur.execute(sql)
-                if sql.strip().lower().startswith("select"):
-                    rows = cur.fetchall()
-                    st.dataframe(pd.DataFrame(rows))
-                conn.commit()
-                st.success("Success.")
-            except Error as e:
-                st.error(f"MySQL error: {e}")
-            finally:
-                conn.close()
+    st.sidebar.header("Navigation")
+    nav = st.sidebar.radio(
+        "Choose view",
+        ["Users", "Records", "Progress"],
+        key="nav_choice",
+    )
 
-    # 2 ─ View schema ----------------------------------------------------------
-    elif nav == "View Schema":
-        st.subheader("Database Schema")
-        for tbl in list_tables():
-            with st.expander(tbl):
-                schema = get_table_schema(tbl)
-                st.table(schema)
+    # ---------- USERS --------------------------------------------------------
+    if nav == "Users":
+        st.subheader("All Users")
 
-    # 3 ─ Create table ---------------------------------------------------------
-    elif nav == "Create Table":
-        name = st.text_input("Table name")
-        st.write("Columns (one per line, e.g. `id INT PRIMARY KEY`, `name VARCHAR(100)`)")
-        cols = st.text_area("Definition")
-        if st.button("Create"):
-            try:
-                conn = get_connection(); cur = conn.cursor()
-                cur.execute(f"CREATE TABLE {name} ({cols})")
-                conn.commit()
-                st.success(f"Table `{name}` created.")
-            except Error as e:
-                st.error(e)
-            finally:
-                conn.close()
+        df_users = _load_df("users")
+        st.dataframe(df_users, use_container_width=True)
 
-    # 4 ─ Drop table -----------------------------------------------------------
-    elif nav == "Drop Table":
-        tbl = st.selectbox("Select table", list_tables())
-        if st.button("Drop"):
-            if st.checkbox("Really drop?"):
-                try:
-                    conn = get_connection(); cur = conn.cursor()
-                    cur.execute(f"DROP TABLE {tbl}")
-                    conn.commit()
-                    st.success("Dropped.")
-                except Error as e:
-                    st.error(e)
-                finally:
-                    conn.close()
+        # Approval toggles
+        pending = df_users[df_users["approved"] != 1]
+        if not pending.empty:
+            st.markdown("### Pending Approvals")
+            for _, row in pending.iterrows():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"**{row['username']}** – {row['fullname']} ({row['email']})")
+                with col2:
+                    if st.button("Approve", key=f"approve_{row['username']}"):
+                        _toggle_approval(row["username"], True)
+                        st.experimental_rerun()
 
-    # 5 ─ Insert row -----------------------------------------------------------
-    elif nav == "Insert Row":
-        tbl = st.selectbox("Table", list_tables())
-        schema = get_table_schema(tbl)
-        data = {}
-        for col in schema:
-            data[col["name"]] = st.text_input(col["name"], key=f"ins_{col['name']}")
-        if st.button("Insert"):
-            cols = ", ".join(data.keys())
-            vals = list(data.values())
-            ph   = ", ".join(["%s"] * len(vals))
-            try:
-                conn = get_connection(); cur = conn.cursor()
-                cur.execute(f"INSERT INTO {tbl} ({cols}) VALUES ({ph})", vals)
-                conn.commit()
-                st.success("Inserted.")
-            except IntegrityError as e:
-                st.error(f"Integrity error: {e}")
-            except Error as e:
-                st.error(e)
-            finally:
-                conn.close()
+    # ---------- RECORDS ------------------------------------------------------
+    elif nav == "Records":
+        st.subheader("Assignment / Quiz Scores")
 
-    # 6 ─ Edit row -------------------------------------------------------------
-    elif nav == "Edit Row":
-        tbl = st.selectbox("Table", list_tables(), key="edit_tbl")
-        where = st.text_input("WHERE clause (e.g. id=1)")
-        if st.button("Fetch"):
-            try:
-                conn = get_connection(); cur = conn.cursor(dictionary=True)
-                cur.execute(f"SELECT * FROM {tbl} WHERE {where}")
-                rows = cur.fetchall()
-                conn.close()
-                if not rows:
-                    st.warning("No rows.")
-                else:
-                    st.session_state["rows_to_edit"] = rows
-            except Error as e:
-                st.error(e)
+        df_records = _load_df("records")
+        st.dataframe(df_records, use_container_width=True)
 
-        if "rows_to_edit" in st.session_state:
-            row = st.session_state["rows_to_edit"][0]
-            new_vals = {}
-            for k, v in row.items():
-                new_vals[k] = st.text_input(k, value=v, key=f"up_{k}")
-            if st.button("Update"):
-                set_clause = ", ".join([f"{k}=%s" for k in new_vals])
-                try:
-                    conn = get_connection(); cur = conn.cursor()
-                    cur.execute(
-                        f"UPDATE {tbl} SET {set_clause} WHERE {where}",
-                        list(new_vals.values()),
-                    )
-                    conn.commit()
-                    st.success("Updated.")
-                    st.session_state.pop("rows_to_edit")
-                except Error as e:
-                    st.error(e)
-                finally:
-                    conn.close()
+        csv = df_records.to_csv(index=False).encode()
+        st.download_button("Download CSV", csv, "records.csv", "text/csv")
 
-    # 7 ─ Delete row -----------------------------------------------------------
-    elif nav == "Delete Row":
-        tbl = st.selectbox("Table", list_tables(), key="del_tbl")
-        where = st.text_input("WHERE clause")
-        if st.button("Delete"):
-            try:
-                conn = get_connection(); cur = conn.cursor()
-                cur.execute(f"DELETE FROM {tbl} WHERE {where}")
-                conn.commit()
-                st.success("Deleted.")
-            except Error as e:
-                st.error(e)
-            finally:
-                conn.close()
+    # ---------- PROGRESS -----------------------------------------------------
+    elif nav == "Progress":
+        st.subheader("Weekly Progress")
 
-    # 8 ─ Alter table (add / drop column) --------------------------------------
-    elif nav == "Alter Table":
-        tbl = st.selectbox("Table", list_tables(), key="alt_tbl")
-        choice = st.radio("Action", ["Add Column", "Drop Column"])
-        if choice == "Add Column":
-            col = st.text_input("Column definition (e.g. `age INT`)")
-            if st.button("Add"):
-                try:
-                    conn = get_connection(); cur = conn.cursor()
-                    cur.execute(f"ALTER TABLE {tbl} ADD COLUMN {col}")
-                    conn.commit()
-                    st.success("Column added.")
-                except Error as e:
-                    st.error(e)
-                finally:
-                    conn.close()
-        else:  # Drop column
-            cols = [c["name"] for c in get_table_schema(tbl)]
-            col = st.selectbox("Column to drop", cols)
-            if st.button("Drop"):
-                st.warning("MySQL requires table rebuild for dropping columns in some versions.")
-                try:
-                    conn = get_connection(); cur = conn.cursor()
-                    cur.execute(f"ALTER TABLE {tbl} DROP COLUMN {col}")
-                    conn.commit()
-                    st.success("Dropped.")
-                except Error as e:
-                    st.error(e)
-                finally:
-                    conn.close()
+        df_prog = _load_df("progress")
+        st.dataframe(df_prog, use_container_width=True)
 
-    # 9 ─ View user progress ---------------------------------------------------
-    elif nav == "View User Progress":
-        st.subheader("User Progress")
-        try:
-            conn = get_connection(); cur = conn.cursor(dictionary=True)
-            cur.execute(
-                """
-                SELECT p.username,
-                       p.fullname,
-                       week1track, week2track, week3track, week4track, week5track
-                FROM progress p
-                ORDER BY p.fullname
-                """
-            )
-            rows = cur.fetchall()
-            conn.close()
-            df = pd.DataFrame(rows)
-            if not df.empty:
-                df.rename(columns={
-                    "fullname": "Full Name",
-                    "week1track": "Week 1",
-                    "week2track": "Week 2",
-                    "week3track": "Week 3",
-                    "week4track": "Week 4",
-                    "week5track": "Week 5",
-                }, inplace=True)
-                st.dataframe(df, use_container_width=True)
-            else:
-                st.write("No data.")
-        except Error as e:
-            st.error(e)
+        csv = df_prog.to_csv(index=False).encode()
+        st.download_button("Download CSV", csv, "progress.csv", "text/csv")
