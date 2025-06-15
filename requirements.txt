@@ -5,10 +5,8 @@ streamlit-folium==0.16.0
 requests
 pandas
 geopy==2.4.1
-folium
 folium==0.16.0
 matplotlib==3.8.4
 pillow
 PyGithub
-pillow
 openpyxl
