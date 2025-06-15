@@ -8,7 +8,6 @@ from utils.style1 import set_page_style
 import mysql.connector
 from mysql.connector import IntegrityError
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # DB helper – reads `[mysql]` block in secrets
 # ──────────────────────────────────────────────────────────────────────────────
@@ -23,9 +22,8 @@ def _get_conn():
         autocommit=False,
     )
 
-
 # ──────────────────────────────────────────────────────────────────────────────
-# Main UI                                                                   │
+# Main UI
 # ──────────────────────────────────────────────────────────────────────────────
 def show():
     # Apply the custom page style
@@ -54,7 +52,7 @@ def show():
     )
     tab1, tab2 = st.tabs(["Assignment Details", "Grading Details"])
 
-    # … (unchanged descriptive Markdown) …
+    # Add markdown content inside these tabs if needed
 
     # ──────────────────────────────────────────────────────────────
     # Step 1: Enter Username
@@ -75,7 +73,7 @@ def show():
             st.session_state["username"] = username_input
             st.success(f"Welcome, {username_input}!")
         else:
-            st.error("Invalid username. Please enter a registered username.")
+            st.error("❌ Invalid username. Please enter a registered username.")
             st.session_state["username_entered"] = False
 
     # ──────────────────────────────────────────────────────────────
@@ -120,7 +118,7 @@ def show():
                 st.session_state["run_success"] = True
             except Exception as e:
                 sys.stdout = sys.__stdout__
-                st.error(f"An error occurred while running your code: {e}")
+                st.error(f"❌ An error occurred while running your code: {e}")
 
         # ───────── Show outputs
         if st.session_state["run_success"]:
@@ -151,29 +149,33 @@ def show():
         # ───────── Submit code
         if st.button("Submit Code"):
             if not st.session_state.get("run_success", False):
-                st.error("Please run your code successfully before submitting.")
+                st.error("❌ Please run your code successfully before submitting.")
             else:
                 from grades.grade1 import grade_assignment
 
                 grade = grade_assignment(code_input)
+
                 if grade < 70:
-                    st.error(f"You got {grade}/100. Please try again.")
+                    st.warning(f"⚠️ You got {grade}/100. Please try again.")
                 else:
-                    with _get_conn() as conn:
-                        cur = conn.cursor()
-                        cur.execute(
-                            "UPDATE records SET as1 = %s WHERE username = %s",
-                            (grade, st.session_state["username"]),
-                        )
-                        conn.commit()
-                        updated = cur.rowcount
+                    try:
+                        with _get_conn() as conn:
+                            cur = conn.cursor()
+                            cur.execute(
+                                "UPDATE records SET as1 = %s WHERE username = %s",
+                                (grade, st.session_state["username"]),
+                            )
+                            conn.commit()
+                            updated = cur.rowcount
 
-                    if updated:
-                        st.success(f"Submission successful! Your grade: {grade}/100")
-                    else:
-                        st.error("No record updated—please check username/database.")
+                        if updated:
+                            st.success(f"✅ Submission successful! Your grade: {grade}/100")
+                        else:
+                            st.error("⚠️ No record updated — please check username or database.")
+                    except IntegrityError as e:
+                        st.error(f"❌ Submission failed: {e}")
 
-                    # Reset state
+                    # Reset state after successful submit
                     st.session_state["username_entered"] = False
                     st.session_state["username"] = ""
 
