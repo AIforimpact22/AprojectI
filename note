@@ -121,7 +121,6 @@ if __name__ == "__main__":
 
 
 
-
 as1.py
 import streamlit as st
 import folium
