@@ -6,7 +6,7 @@ requests
 pandas
 geopy
 folium
-matplotlib==3.8.4
+matplotlib
 pillow
 PyGithub
 openpyxl
