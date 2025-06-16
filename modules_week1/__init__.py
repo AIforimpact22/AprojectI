@@ -1,9 +1,7 @@
 import streamlit as st
 from github_progress import get_user_progress, update_user_progress
-from . import tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10
-import os
+from . import tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11
 import re
-import importlib.util
 
 def safe_rerun():
     if hasattr(st, "experimental_rerun"):
@@ -14,11 +12,6 @@ def safe_rerun():
         st.error("Streamlit rerun functionality is not available.")
 
 def parse_tab_title(title):
-    """
-    Extracts a numeric tuple from the beginning of the title.
-    E.g., "1.1 Introduction to Python" -> (1, 1)
-          "1.1.1 New" -> (1, 1, 1)
-    """
     m = re.match(r"(\d+(?:\.\d+)*)(.*)", title)
     if m:
         numbers = m.group(1)
@@ -29,33 +22,6 @@ def parse_tab_title(title):
         return parts
     return (0,)
 
-def load_update_tabs():
-    """
-    Loads update tabs for Week 1 from the updates folder.
-    Uses importlib.util to load modules directly from the file location.
-    Each update module should define a variable TAB_TITLE.
-    """
-    update_tabs = []
-    updates_folder = os.path.join(os.getcwd(), "updates")
-    if os.path.isdir(updates_folder):
-        for file in os.listdir(updates_folder):
-            if file.startswith("tab") and file.endswith(".py"):
-                if file.endswith("update.py"):
-                    filepath = os.path.join(updates_folder, file)
-                    # Create a sanitized module name (replace dots with underscores)
-                    sanitized_module_name = file[:-3].replace('.', '_')
-                    try:
-                        spec = importlib.util.spec_from_file_location(sanitized_module_name, filepath)
-                        mod = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(mod)
-                        if hasattr(mod, "show"):
-                            title = getattr(mod, "TAB_TITLE", None)
-                            if title and title.startswith("1."):
-                                update_tabs.append((title, mod.show))
-                    except Exception as e:
-                        st.error(f"Error loading {file}: {e}")
-    return update_tabs
-
 def show():
     username = st.session_state.get("username", "default_user")
     week = 1
@@ -64,7 +30,7 @@ def show():
     if progress < 1:
         progress = 1
 
-    # Default hardcoded tabs.
+    # Define the list of hardcoded tabs for Week 1
     default_tabs = [
         ("1.1 Introduction to Python", tab1.show),
         ("1.2 You made it!", tab2.show),
@@ -76,16 +42,11 @@ def show():
         ("1.8 APIs", tab8.show),
         ("1.9 Assignment 2", tab9.show),
         ("1.10 Real-Time", tab10.show),
+        ("1.11 Wrap Up", tab11.show)
     ]
 
-    # Load update tabs for Week 1.
-    update_tabs = load_update_tabs()
-
-    # Merge default and update tabs.
-    all_tabs = default_tabs + update_tabs
-
-    # Sort all tabs by the numeric tuple extracted from their titles.
-    all_tabs_sorted = sorted(all_tabs, key=lambda x: parse_tab_title(x[0]))
+    # Sort the tabs
+    all_tabs_sorted = sorted(default_tabs, key=lambda x: parse_tab_title(x[0]))
 
     tab_titles = [t[0] for t in all_tabs_sorted]
     tab_funcs = [t[1] for t in all_tabs_sorted]
