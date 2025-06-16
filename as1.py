@@ -1,3 +1,4 @@
+
 import streamlit as st
 import folium
 import pandas as pd
@@ -5,84 +6,178 @@ from geopy.distance import geodesic
 from io import StringIO
 from streamlit_folium import st_folium
 from utils.style1 import set_page_style
-from database import get_connection   # <— central helper
+import mysql.connector
+from mysql.connector import IntegrityError
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DB helper – reads `[mysql]` block in secrets
+# ──────────────────────────────────────────────────────────────────────────────
+def _get_conn():
+    cfg = st.secrets["mysql"]
+    return mysql.connector.connect(
+        host=cfg["host"],
+        port=int(cfg.get("port", 3306)),
+        user=cfg["user"],
+        password=cfg["password"],
+        database=cfg["database"],
+        autocommit=False,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Main UI                                                                   │
+# ──────────────────────────────────────────────────────────────────────────────
 def show():
-    # style & state
+    # Apply the custom page style
     set_page_style()
-    for k, v in {
+
+    # Initialize session state variables if not already set
+    defaults = {
         "run_success": False,
         "map_object": None,
         "dataframe_object": None,
         "captured_output": "",
         "username_entered": False,
         "username": "",
-    }.items():
+    }
+    for k, v in defaults.items():
         st.session_state.setdefault(k, v)
 
-    st.title("Assignment 1 – Mapping Coordinates & Distances")
+    st.title("Assignment 1: Mapping Coordinates and Calculating Distances")
 
-    # (Markdown for assignment + grading unchanged) …
+    # ──────────────────────────────────────────────────────────────
+    # Step 2: Review Assignment Details (always show)
+    # ──────────────────────────────────────────────────────────────
+    st.markdown(
+        '<h1 style="color: #ADD8E6;">Step 2: Review Assignment Details</h1>',
+        unsafe_allow_html=True,
+    )
+    tab1, tab2 = st.tabs(["Assignment Details", "Grading Details"])
 
-    # ── Step 1 : Enter username ───────────────────────────
-    st.subheader("Step 1 – Enter Your Username")
+    # … (unchanged descriptive Markdown) …
+
+    # ──────────────────────────────────────────────────────────────
+    # Step 1: Enter Username
+    # ──────────────────────────────────────────────────────────────
+    st.markdown(
+        '<h1 style="color: #ADD8E6;">Step 1: Enter Your Username</h1>',
+        unsafe_allow_html=True,
+    )
     username_input = st.text_input("Username", key="as1_username")
     if st.button("Enter"):
-        with get_connection() as conn:
+        with _get_conn() as conn:
             cur = conn.cursor()
             cur.execute("SELECT 1 FROM records WHERE username = %s", (username_input,))
-            if cur.fetchone():
-                st.session_state.update(username_entered=True, username=username_input)
-                st.success(f"Welcome, {username_input}!")
-            else:
-                st.error("Invalid username.")
-                st.session_state["username_entered"] = False
+            user_exists = cur.fetchone() is not None
 
-    # ── Step 3 – Run & Submit code ───────────────────────
-    if st.session_state["username_entered"]:
-        st.subheader("Step 3 – Run and Submit Your Code")
-        code_input = st.text_area("📝 Paste your code here", height=300)
+        if user_exists:
+            st.session_state["username_entered"] = True
+            st.session_state["username"] = username_input
+            st.success(f"Welcome, {username_input}!")
+        else:
+            st.error("Invalid username. Please enter a registered username.")
+            st.session_state["username_entered"] = False
 
+    # ──────────────────────────────────────────────────────────────
+    # Step 3: Run and Submit Code (logged-in users)
+    # ──────────────────────────────────────────────────────────────
+    if st.session_state.get("username_entered", False):
+        st.markdown(
+            '<h1 style="color: #ADD8E6;">Step 3: Run and Submit Your Code</h1>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<p style="color: white;">📝 Paste Your Code Here</p>',
+            unsafe_allow_html=True,
+        )
+        code_input = st.text_area("", height=300)
+
+        # ───────── Run code
         if st.button("Run Code"):
             st.session_state["run_success"] = False
+            st.session_state["captured_output"] = ""
             try:
-                import sys, traceback
-                captured = StringIO(); sys.stdout, old = captured, sys.stdout
-                local_ctx = {}; exec(code_input, {}, local_ctx)
-                sys.stdout = old
-                st.session_state["captured_output"]  = captured.getvalue()
-                st.session_state["map_object"]       = next((o for o in local_ctx.values() if isinstance(o, folium.Map)), None)
-                st.session_state["dataframe_object"] = next((o for o in local_ctx.values() if isinstance(o, pd.DataFrame)), None)
-                st.session_state["run_success"]      = True
-            except Exception as e:
-                sys.stdout = old
-                st.error(f"Error running code:\n{traceback.format_exc()}")
+                import sys
 
+                captured = StringIO()
+                sys.stdout = captured
+
+                local_ctx = {}
+                exec(code_input, {}, local_ctx)
+
+                sys.stdout = sys.__stdout__
+                st.session_state["captured_output"] = captured.getvalue()
+
+                # Detect map / DataFrame
+                st.session_state["map_object"] = next(
+                    (o for o in local_ctx.values() if isinstance(o, folium.Map)), None
+                )
+                st.session_state["dataframe_object"] = next(
+                    (o for o in local_ctx.values() if isinstance(o, pd.DataFrame)),
+                    None,
+                )
+
+                st.session_state["run_success"] = True
+            except Exception as e:
+                sys.stdout = sys.__stdout__
+                st.error(f"An error occurred while running your code: {e}")
+
+        # ───────── Show outputs
         if st.session_state["run_success"]:
-            st.code(st.session_state["captured_output"] or "No text output.")
+            st.markdown(
+                '<h3 style="color: white;">📄 Captured Output</h3>',
+                unsafe_allow_html=True,
+            )
+            if st.session_state["captured_output"]:
+                out_fmt = st.session_state["captured_output"].replace("\n", "<br>")
+                st.markdown(
+                    f'<pre style="color: white; white-space: pre-wrap; word-wrap: break-word;">{out_fmt}</pre>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    '<p style="color: white;">No text output captured.</p>',
+                    unsafe_allow_html=True,
+                )
+
             if st.session_state["map_object"]:
+                st.markdown("### 🗺️ Map Output")
                 st_folium(st.session_state["map_object"], width=1000, height=500)
+
             if st.session_state["dataframe_object"] is not None:
+                st.markdown("### 📊 DataFrame Output")
                 st.dataframe(st.session_state["dataframe_object"])
 
+        # ───────── Submit code
         if st.button("Submit Code"):
-            if not st.session_state["run_success"]:
-                st.error("Run your code first.")
-                return
-            from grades.grade1 import grade_assignment
-            grade = grade_assignment(code_input)
-            if grade < 70:
-                st.error(f"You got {grade}/100. Please try again.")
-                return
-            with get_connection() as conn:
-                cur = conn.cursor()
-                cur.execute(
-                    "UPDATE records SET as1 = %s WHERE username = %s",
-                    (grade, st.session_state["username"])
-                )
-                conn.commit()
-            st.success(f"Submission successful! Your grade: {grade}/100")
-            st.session_state.update(username_entered=False, username="")
+            if not st.session_state.get("run_success", False):
+                st.error("Please run your code successfully before submitting.")
+            else:
+                from grades.grade1 import grade_assignment
+
+                grade = grade_assignment(code_input)
+                if grade < 70:
+                    st.error(f"You got {grade}/100. Please try again.")
+                else:
+                    with _get_conn() as conn:
+                        cur = conn.cursor()
+                        cur.execute(
+                            "UPDATE records SET as1 = %s WHERE username = %s",
+                            (grade, st.session_state["username"]),
+                        )
+                        conn.commit()
+                        updated = cur.rowcount
+
+                    if updated:
+                        st.success(f"Submission successful! Your grade: {grade}/100")
+                    else:
+                        st.error("No record updated—please check username/database.")
+
+                    # Reset state
+                    st.session_state["username_entered"] = False
+                    st.session_state["username"] = ""
+
 
 if __name__ == "__main__":
     show()
