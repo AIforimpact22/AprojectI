@@ -18,19 +18,13 @@ def safe_rerun():
         st.error("Streamlit rerun functionality is not available.")
 
 def enforce_week_gating(selected):
-    """
-    Enforces that a weekly module is accessible only if the previous week is fully completed.
-    For example, if Week 1 has 10 tabs, then Week 2 will be unlocked only if the user's progress
-    for "week1" is 10. Similarly, Week 3 will be unlocked only if "week2" progress is 12, etc.
-    """
     if selected.startswith("modules_week"):
         try:
             week = int(selected.replace("modules_week", ""))
         except ValueError:
-            return True  # Allow if the format is invalid.
+            return True
         if week == 1:
-            return True  # Week 1 is always accessible.
-        # Define required progress for previous weeks.
+            return True
         required_progress = {2: 10, 3: 12, 4: 12, 5: 7}
         username = st.session_state.get("username", "default_user")
         user_prog = get_user_progress(username)
@@ -44,11 +38,6 @@ def main():
     apply_dark_theme()
     create_tables()
 
-    # Add the 'updates' folder to sys.path so that modules within it can be imported.
-    updates_path = os.path.abspath("updates")
-    if os.path.isdir(updates_path) and updates_path not in sys.path:
-        sys.path.append(updates_path)
-    
     if "page" not in st.session_state:
         st.session_state["page"] = "offer"
 
@@ -63,17 +52,12 @@ def main():
         elif selected == "home":
             show_home()
         else:
-            # Use gating logic based on GitHub progress.
             if not enforce_week_gating(selected):
                 st.warning("You must complete the previous week before accessing this section.")
                 st.stop()
             try:
-                # First, try importing the module with the given name.
-                try:
-                    module = import_module(selected)
-                except ImportError:
-                    # If not found, try importing from the updates folder.
-                    module = import_module("updates." + selected)
+                # Only try to import directly from selected module name
+                module = import_module(selected)
                 if hasattr(module, "show"):
                     module.show()
                 else:
