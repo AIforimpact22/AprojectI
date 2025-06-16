@@ -1,5 +1,3 @@
-
-
 def grade_assignment(code):
     """
     Calculates a numeric grade for the assignment based on the user's code.
@@ -68,33 +66,27 @@ def grade_assignment(code):
 
             # Extract distances from a DataFrame if it exists
             if distances_df is not None:
-                print(f"DataFrame detected: {distances_df}")
                 numeric_columns = distances_df.select_dtypes(include=["float", "int"]).columns
                 if not numeric_columns.empty:
                     actual_distances = distances_df[numeric_columns[0]].tolist()
-                    print(f"Extracted distances from DataFrame: {actual_distances}")
                 else:
                     print("No numeric columns found in DataFrame.")
 
             # If no DataFrame, fallback to searching for numeric patterns in code
             if not actual_distances:
-                print("No DataFrame detected. Checking code for numeric patterns...")
-                numeric_pattern = r"[-+]?[0-9]*\\.?[0-9]+"
+                numeric_pattern = r"[-+]?[0-9]*\.?[0-9]+"
                 actual_distances = [float(match) for match in re.findall(numeric_pattern, code) if "." in match]
-                print(f"Extracted distances from code: {actual_distances}")
 
             # Validate distances
-            expected_distances = [59.57, 73.14, 37.98]  # Example expected distances
+            expected_distances = [59.57, 73.14, 37.98]
             tolerance = 0.5
             correct_distances = 0
             for expected in expected_distances:
                 if any(abs(expected - actual) <= tolerance for actual in actual_distances):
                     correct_distances += 1
 
-            # Assign points based on correct distances
             grade += correct_distances * (20 / len(expected_distances))
         except Exception as e:
             print(f"Distance Verification Error: {e}")
 
     return round(grade)
-
