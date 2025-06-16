@@ -5,26 +5,16 @@ from geopy.distance import geodesic
 from io import StringIO
 from streamlit_folium import st_folium
 from utils.style1 import set_page_style
-from github_sync import push_db_to_github  # Optional
-from database import get_connection  # ✅ MySQL connection function
+import mysql.connector
 
+# Apply the custom page style
 def show():
-    # Apply the custom page style
     set_page_style()
 
-    # Initialize session state
-    if "run_success" not in st.session_state:
-        st.session_state["run_success"] = False
-    if "map_object" not in st.session_state:
-        st.session_state["map_object"] = None
-    if "dataframe_object" not in st.session_state:
-        st.session_state["dataframe_object"] = None
-    if "captured_output" not in st.session_state:
-        st.session_state["captured_output"] = ""
-    if "username_entered" not in st.session_state:
-        st.session_state["username_entered"] = False
-    if "username" not in st.session_state:
-        st.session_state["username"] = ""
+    # Initialize session state variables if not already set
+    for key in ["run_success", "map_object", "dataframe_object", "captured_output", "username_entered", "username"]:
+        if key not in st.session_state:
+            st.session_state[key] = False if key != "username" else ""
 
     st.title("Assignment 1: Mapping Coordinates and Calculating Distances")
 
@@ -35,120 +25,113 @@ def show():
     with tab1:
         st.markdown("""
         ### Objective
-        In this assignment, you will write a Python script to plot three geographical coordinates...
+        In this assignment, you will write a Python script to plot three geographical coordinates on a map and calculate the distance between each pair of points in kilometers.
+        
+        **Assignment: Week 1 – Mapping Coordinates and Calculating Distances in Python**
         """)
     with st.expander("See More"):
         st.markdown("""
         **Task Requirements:**
-        ...
+        1. Plot three coordinates on a map
+        2. Calculate the distance between each pair
+        **Coordinates:**
+        - Point 1: 36.325735, 43.928414
+        - Point 2: 36.393432, 44.586781
+        - Point 3: 36.660477, 43.840174
         """)
 
     with tab2:
         st.markdown("""
-        ### Detailed Grading Breakdown
-        ...
+        ### Grading Breakdown
+        - Code Structure: 30
+        - Map Visualization: 40
+        - Distance Calculations: 30
         """)
-        with st.expander("See More"):
-            st.markdown("""
-            #### 2. Map Visualization (40 points)
-            ...
-            """)
 
-    # Step 1: Enter Username
+    # Step 1: Enter Your Username
     st.markdown('<h1 style="color: #ADD8E6;">Step 1: Enter Your Username</h1>', unsafe_allow_html=True)
     username_input = st.text_input("Username", key="as1_username")
-    enter_username = st.button("Enter")
-    if enter_username and username_input:
-        try:
-            conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM records WHERE username = %s", (username_input,))
-            user_record = cursor.fetchone()
-            conn.close()
+    if st.button("Enter") and username_input:
+        conn = mysql.connector.connect(
+            host=st.secrets["mysql"]["host"],
+            port=st.secrets["mysql"]["port"],
+            user=st.secrets["mysql"]["user"],
+            password=st.secrets["mysql"]["password"],
+            database=st.secrets["mysql"]["database"]
+        )
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM records WHERE username = %s", (username_input,))
+        user_record = cursor.fetchone()
+        conn.close()
 
-            if user_record:
-                st.session_state["username_entered"] = True
-                st.session_state["username"] = username_input
-                st.success(f"Welcome, {username_input}!")
-            else:
-                st.error("Invalid username. Please enter a registered username.")
-                st.session_state["username_entered"] = False
-        except Exception as e:
-            st.error(f"MySQL Error: {e}")
+        if user_record:
+            st.session_state["username_entered"] = True
+            st.session_state["username"] = username_input
+            st.success(f"Welcome, {username_input}!")
+        else:
+            st.error("Invalid username.")
+            st.session_state["username_entered"] = False
 
     if st.session_state.get("username_entered", False):
         st.markdown('<h1 style="color: #ADD8E6;">Step 3: Run and Submit Your Code</h1>', unsafe_allow_html=True)
         st.markdown('<p style="color: white;">📝 Paste Your Code Here</p>', unsafe_allow_html=True)
         code_input = st.text_area("", height=300)
 
-        if st.button("Run Code", key="run_code_button") and code_input:
+        if st.button("Run Code") and code_input:
             st.session_state["run_success"] = False
             st.session_state["captured_output"] = ""
             try:
-                from io import StringIO
-                import sys
                 captured_output = StringIO()
+                import sys
                 sys.stdout = captured_output
                 local_context = {}
                 exec(code_input, {}, local_context)
                 sys.stdout = sys.__stdout__
                 st.session_state["captured_output"] = captured_output.getvalue()
-                map_object = next((obj for obj in local_context.values() if isinstance(obj, folium.Map)), None)
-                dataframe_object = next((obj for obj in local_context.values() if isinstance(obj, pd.DataFrame)), None)
-                st.session_state["map_object"] = map_object
-                st.session_state["dataframe_object"] = dataframe_object
+                st.session_state["map_object"] = next((v for v in local_context.values() if isinstance(v, folium.Map)), None)
+                st.session_state["dataframe_object"] = next((v for v in local_context.values() if isinstance(v, pd.DataFrame)), None)
                 st.session_state["run_success"] = True
             except Exception as e:
                 sys.stdout = sys.__stdout__
-                st.error(f"An error occurred while running your code: {e}")
+                st.error(f"Error running code: {e}")
 
         if st.session_state["run_success"]:
             st.markdown('<h3 style="color: white;">📄 Captured Output</h3>', unsafe_allow_html=True)
-            if st.session_state["captured_output"]:
-                st.markdown(f'<pre style="color: white;">{st.session_state["captured_output"].replace("\n", "<br>")}</pre>', unsafe_allow_html=True)
-            else:
-                st.markdown('<p style="color: white;">No text output captured.</p>', unsafe_allow_html=True)
-
+            out = st.session_state["captured_output"].replace('\n', '<br>')
+            st.markdown(f'<pre style="color: white;">{out}</pre>', unsafe_allow_html=True)
             if st.session_state["map_object"]:
-                st.markdown("### 🗺️ Map Output")
+                st.markdown("### 🗌️ Map Output")
                 st_folium(st.session_state["map_object"], width=1000, height=500)
-
             if st.session_state["dataframe_object"] is not None:
                 st.markdown("### 📊 DataFrame Output")
                 st.dataframe(st.session_state["dataframe_object"])
 
-        if st.button("Submit Code", key="submit_code_button"):
+        if st.button("Submit Code"):
             if not st.session_state.get("run_success", False):
-                st.error("Please run your code successfully before submitting.")
-            elif st.session_state.get("username", "").strip():
+                st.error("Please run your code before submitting.")
+            else:
                 from grades.grade1 import grade_assignment
                 grade = grade_assignment(code_input)
                 if grade < 70:
-                    st.error(f"You got {grade}/100. Please try again.")
+                    st.error(f"You got {grade}/100. Try again.")
                 else:
                     try:
-                        conn = get_connection()
+                        conn = mysql.connector.connect(
+                            host=st.secrets["mysql"]["host"],
+                            port=st.secrets["mysql"]["port"],
+                            user=st.secrets["mysql"]["user"],
+                            password=st.secrets["mysql"]["password"],
+                            database=st.secrets["mysql"]["database"]
+                        )
                         cursor = conn.cursor()
                         cursor.execute("UPDATE records SET as1 = %s WHERE username = %s", (grade, st.session_state["username"]))
                         conn.commit()
-                        updated_rows = cursor.rowcount
                         conn.close()
-
-                        if updated_rows == 0:
-                            st.error("No record updated. Please check the username or database integrity.")
-                        else:
-                            st.info("Grade updated. Pushing changes to GitHub...")
-                            try:
-                                response = push_db_to_github("mydatabase.db")  # This path isn't used anymore if you're not pushing .db files
-                                st.success(f"Submission successful! Your grade: {grade}/100")
-                            except Exception as e:
-                                st.error(f"GitHub sync error: {str(e)}")
-                        st.session_state["username_entered"] = False
+                        st.success(f"Submission successful! Your grade: {grade}/100")
                         st.session_state["username"] = ""
+                        st.session_state["username_entered"] = False
                     except Exception as e:
-                        st.error(f"MySQL Error: {e}")
-            else:
-                st.error("Please enter your username to submit.")
+                        st.error(f"Failed to update grade: {e}")
 
 if __name__ == "__main__":
     show()
