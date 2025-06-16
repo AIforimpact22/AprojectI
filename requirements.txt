@@ -1,5 +1,5 @@
 streamlit==1.45.1
-mysql-connector-python==9.3.0
+mysql-connector-python>=8.0.33
 streamlit-option-menu
 streamlit-folium
 requests
