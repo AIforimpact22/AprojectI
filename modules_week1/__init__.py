@@ -15,6 +15,7 @@ import modules_week1.tab7 as tab7
 import modules_week1.tab8 as tab8
 import modules_week1.tab9 as tab9
 import modules_week1.tab10 as tab10
+import modules_week1.tab11 as tab11  # Add this import
 
 def safe_rerun():
     if hasattr(st, "experimental_rerun"):
@@ -86,6 +87,7 @@ def show():
         ("1.8 APIs", tab8.show),
         ("1.9 Assignment 2", tab9.show),
         ("1.10 Real-Time", tab10.show),
+        ("1.11 Quiz 1", tab11.show),  # Add this line
     ]
 
     # Load update tabs for Week 1.
