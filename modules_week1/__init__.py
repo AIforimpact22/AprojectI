@@ -15,7 +15,7 @@ import modules_week1.tab7 as tab7
 import modules_week1.tab8 as tab8
 import modules_week1.tab9 as tab9
 import modules_week1.tab10 as tab10
-import modules_week1.tab11 as tab11  # Add this import
+import modules_week1.tab11 as tab11  # New import for Quiz 1
 
 def safe_rerun():
     if hasattr(st, "experimental_rerun"):
@@ -75,7 +75,7 @@ def show():
     if progress < 1:
         progress = 1
 
-    # Default hardcoded tabs
+    # Default hardcoded tabs - added tab11 at the end
     default_tabs = [
         ("1.1 Introduction to Python", tab1.show),
         ("1.2 You made it!", tab2.show),
@@ -87,7 +87,7 @@ def show():
         ("1.8 APIs", tab8.show),
         ("1.9 Assignment 2", tab9.show),
         ("1.10 Real-Time", tab10.show),
-        ("1.11 Quiz 1", tab11.show),  # Add this line
+        ("1.11 Quiz 1", tab11.show),  # Added Quiz 1 as tab11
     ]
 
     # Load update tabs for Week 1.
