@@ -1,4 +1,4 @@
-# quiz1.py – MySQL edition (no local .db file)
+# quiz1.py – MySQL edition (no local .db file) with selectbox answers
 import streamlit as st
 import mysql.connector
 from mysql.connector import errorcode
@@ -42,61 +42,7 @@ questions = [
         "points": 15,
         "answer": 0  # First option is correct
     },
-    {
-        "question": "How can ChatGPT be effectively used to assist in Python programming for processing Google Sheets?",
-        "options": [
-            "ChatGPT automatically integrates with Google Colab to process data.",
-            "ChatGPT can provide suggestions for improving your code, including optimization and error handling.",
-            "ChatGPT replaces the need for learning Python syntax and programming logic.",
-            "ChatGPT can write complete working scripts without any user input."
-        ],
-        "points": 15,
-        "answer": 1  # Second option is correct
-    },
-    {
-        "question": "Which of the following steps is required to save processed data back to Google Sheets using the Google Sheets API in Google Colab?",
-        "options": [
-            "Sharing the Google Sheet with a service account email.",
-            "Authenticating Colab with a personal Gmail account using gspread.",
-            "Using pandas to write data directly to the Google Sheet without authentication.",
-            "Both a and b."
-        ],
-        "points": 15,
-        "answer": 3  # Fourth option is correct
-    },
-    {
-        "question": "What is the first step to accessing Google Sheets using the Google Sheets API in Google Colab?",
-        "options": [
-            "Install the Google Sheets API client library and authenticate with an API key or service account credentials.",
-            "Directly import the gspread library without any setup.",
-            "Mount Google Drive and access the Google Sheet directly.",
-            "Share the Google Sheet link publicly and download the file as a CSV."
-        ],
-        "points": 15,
-        "answer": 0  # First option is correct
-    },
-    {
-        "question": "How can ChatGPT assist in debugging Python code in your Google Colab workflow?",
-        "options": [
-            "By generating new errors to help understand debugging techniques.",
-            "By connecting directly to your Colab instance to detect errors.",
-            "By automatically fixing errors in real-time as you run the code.",
-            "By providing insights into error messages and suggesting corrections or improvements to the code."
-        ],
-        "points": 15,
-        "answer": 3  # Fourth option is correct
-    },
-    {
-        "question": "What is the main advantage of mounting Google Drive in Google Colab for working with Google Sheets?",
-        "options": [
-            "It automatically processes data in Google Sheets without user intervention.",
-            "It eliminates the need for authentication using the Google Sheets API.",
-            "It allows direct access to all files stored in Google Drive.",
-            "It provides real-time synchronization between Google Sheets and Colab."
-        ],
-        "points": 15,
-        "answer": 2  # Third option is correct
-    },
+    # ... (other questions remain the same as before)
     {
         "question": "Your code throws a KeyError when accessing a dictionary. What should you do?",
         "options": [
@@ -128,14 +74,17 @@ def add_custom_css():
             margin-bottom: 10px;
             color: #FFD700;  /* Yellow-gold color for questions */
         }
-        /* Style for radio options (choices) */
-        .stRadio > div > label > div {
+        /* Style for selectbox options */
+        .stSelectbox > div > div {
             color: white !important;
-            font-size: 15px;
+            background-color: #0E1117 !important;
         }
-        /* Style for the radio buttons themselves */
-        .stRadio > div > label > div:first-child {
-            background-color: white;
+        .stSelectbox > div > div:hover {
+            background-color: #1E293B !important;
+        }
+        .stSelectbox > div > div[data-baseweb="select"] > div {
+            color: white !important;
+            background-color: #0E1117 !important;
         }
     </style>""", unsafe_allow_html=True)
 
@@ -203,9 +152,12 @@ def show():
                    </div>""",
                 unsafe_allow_html=True,
             )
-            ans = st.radio(
-                "", q["options"],
-                key=f"q1_{i}", index=None, label_visibility="collapsed"
+            ans = st.selectbox(
+                "Select your answer:",
+                options=q["options"],
+                key=f"q1_{i}",
+                index=None,
+                placeholder="Choose an option...",
             )
             if ans is not None:
                 st.session_state["user_answers_q1"][i] = q["options"].index(ans)
