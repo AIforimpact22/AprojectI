@@ -1,10 +1,10 @@
-# quiz1.py – MySQL edition (no local .db file) with selectbox answers
+# quiz1.py – MySQL edition with selectbox answers
 import streamlit as st
 import mysql.connector
 from mysql.connector import errorcode
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Optional GitHub-push stub (keeps call-sites alive after file removal)
+# Optional GitHub-push stub
 # ──────────────────────────────────────────────────────────────────────────────
 try:
     from github_sync import push_db_to_github        # noqa: F401
@@ -19,12 +19,12 @@ except ModuleNotFoundError:
 def _get_conn():
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
-        host     = cfg["host"],
-        port     = int(cfg.get("port", 3306)),
-        user     = cfg["user"],
-        password = cfg["password"],
-        database = cfg["database"],
-        autocommit = False,
+        host=cfg["host"],
+        port=int(cfg.get("port", 3306)),
+        user=cfg["user"],
+        password=cfg["password"],
+        database=cfg["database"],
+        autocommit=False,
     )
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -40,9 +40,63 @@ questions = [
             "By using the gspread library with a service account key."
         ],
         "points": 15,
-        "answer": 0  # First option is correct
+        "answer": 0
     },
-    # ... (other questions remain the same as before)
+    {
+        "question": "How can ChatGPT be effectively used to assist in Python programming for processing Google Sheets?",
+        "options": [
+            "ChatGPT automatically integrates with Google Colab to process data.",
+            "ChatGPT can provide suggestions for improving your code, including optimization and error handling.",
+            "ChatGPT replaces the need for learning Python syntax and programming logic.",
+            "ChatGPT can write complete working scripts without any user input."
+        ],
+        "points": 15,
+        "answer": 1
+    },
+    {
+        "question": "Which of the following steps is required to save processed data back to Google Sheets using the Google Sheets API in Google Colab?",
+        "options": [
+            "Sharing the Google Sheet with a service account email.",
+            "Authenticating Colab with a personal Gmail account using gspread.",
+            "Using pandas to write data directly to the Google Sheet without authentication.",
+            "Both a and b."
+        ],
+        "points": 15,
+        "answer": 3
+    },
+    {
+        "question": "What is the first step to accessing Google Sheets using the Google Sheets API in Google Colab?",
+        "options": [
+            "Install the Google Sheets API client library and authenticate with an API key or service account credentials.",
+            "Directly import the gspread library without any setup.",
+            "Mount Google Drive and access the Google Sheet directly.",
+            "Share the Google Sheet link publicly and download the file as a CSV."
+        ],
+        "points": 15,
+        "answer": 0
+    },
+    {
+        "question": "How can ChatGPT assist in debugging Python code in your Google Colab workflow?",
+        "options": [
+            "By generating new errors to help understand debugging techniques.",
+            "By connecting directly to your Colab instance to detect errors.",
+            "By automatically fixing errors in real-time as you run the code.",
+            "By providing insights into error messages and suggesting corrections or improvements to the code."
+        ],
+        "points": 15,
+        "answer": 3
+    },
+    {
+        "question": "What is the main advantage of mounting Google Drive in Google Colab for working with Google Sheets?",
+        "options": [
+            "It automatically processes data in Google Sheets without user intervention.",
+            "It eliminates the need for authentication using the Google Sheets API.",
+            "It allows direct access to all files stored in Google Drive.",
+            "It provides real-time synchronization between Google Sheets and Colab."
+        ],
+        "points": 15,
+        "answer": 2
+    },
     {
         "question": "Your code throws a KeyError when accessing a dictionary. What should you do?",
         "options": [
@@ -52,7 +106,7 @@ questions = [
             "Check if the key exists in the dictionary and handle the error appropriately."
         ],
         "points": 10,
-        "answer": 3  # Fourth option is correct
+        "answer": 3
     }
 ]
 MAX_ATTEMPTS = 1
@@ -67,35 +121,49 @@ def add_custom_css():
             border-radius: 10px;
             padding: 15px;
             margin-bottom: 20px;
+            border: 1px solid #2D3748;
         }
         .question-text {
             font-size: 16px;
             font-weight: bold;
-            margin-bottom: 10px;
-            color: #FFD700;  /* Yellow-gold color for questions */
+            margin-bottom: 15px;
+            color: #FFD700;
         }
-        /* Style for selectbox options */
-        .stSelectbox > div > div {
+        /* Selectbox styling */
+        div[data-baseweb="select"] > div {
+            background-color: #1E293B !important;
             color: white !important;
-            background-color: #0E1117 !important;
+            border-color: #4A5568 !important;
         }
-        .stSelectbox > div > div:hover {
+        div[data-baseweb="popover"] {
             background-color: #1E293B !important;
         }
-        .stSelectbox > div > div[data-baseweb="select"] > div {
+        div[data-baseweb="menu"] li {
+            background-color: #1E293B !important;
             color: white !important;
-            background-color: #0E1117 !important;
+        }
+        div[data-baseweb="menu"] li:hover {
+            background-color: #2D3748 !important;
+        }
+        /* Button styling */
+        .stButton>button {
+            background-color: #2563EB;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .stButton>button:hover {
+            background-color: #1D4ED8;
         }
     </style>""", unsafe_allow_html=True)
 
-
 def validate_username(username):
-    """
-    Return (is_valid, quiz_submitted) using MySQL.
-    """
+    """Check if username exists and hasn't submitted quiz yet."""
     try:
         conn = _get_conn()
-        cur  = conn.cursor()
+        cur = conn.cursor()
         cur.execute("SELECT quiz1 FROM records WHERE username = %s", (username,))
         row = cur.fetchone()
         conn.close()
@@ -113,15 +181,11 @@ def show():
     add_custom_css()
     st.title("Quiz 1: Google Colab and Google Sheets Integration")
 
-    # ─── Step 1: username entry ───────────────────────────────────────────
+    # Step 1: Username validation
     st.markdown("<h2 style='color:#ADD8E6;'>Step 1: Enter Your Username</h2>", unsafe_allow_html=True)
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        username = st.text_input("Username", placeholder="Enter your username", key="quiz1_username")
-    with col2:
-        verify_btn = st.button("Verify Username", key="quiz1_verify")
-
-    if verify_btn:
+    username = st.text_input("Username", placeholder="Enter your username", key="quiz1_username")
+    
+    if st.button("Verify Username", key="quiz1_verify"):
         ok, already = validate_username(username)
         if not ok:
             st.error("❌ Invalid username. Please use a registered username.")
@@ -134,7 +198,7 @@ def show():
             st.session_state["validated_q1"] = True
             st.session_state["username_q1"] = username
 
-    # ─── Step 2: quiz questions ──────────────────────────────────────────
+    # Step 2: Quiz questions
     if st.session_state.get("validated_q1"):
         if "quiz1_attempts" not in st.session_state:
             st.session_state["quiz1_attempts"] = 0
@@ -148,26 +212,31 @@ def show():
         for i, q in enumerate(questions):
             st.markdown(
                 f"""<div class="question-container">
-                       <div class="question-text">Q{i+1}: {q['question']}</div>
-                   </div>""",
-                unsafe_allow_html=True,
+                    <div class="question-text">Q{i+1}: {q['question']}</div>
+                </div>""",
+                unsafe_allow_html=True
             )
+            
+            # Use selectbox for answer selection
             ans = st.selectbox(
                 "Select your answer:",
                 options=q["options"],
                 key=f"q1_{i}",
                 index=None,
                 placeholder="Choose an option...",
+                label_visibility="collapsed"
             )
+            
             if ans is not None:
                 st.session_state["user_answers_q1"][i] = q["options"].index(ans)
 
-        # Submit
+        # Submit button
         if st.button("Submit Quiz", type="primary", use_container_width=True, key="quiz1_submit"):
             if None in st.session_state["user_answers_q1"]:
                 st.error("❌ Please answer all questions before submitting.")
                 return
 
+            # Calculate score
             score = sum(
                 q["points"]
                 for i, q in enumerate(questions)
@@ -182,23 +251,20 @@ def show():
             # Store grade in MySQL
             try:
                 conn = _get_conn()
-                cur  = conn.cursor()
+                cur = conn.cursor()
                 cur.execute(
                     "UPDATE records SET quiz1 = %s WHERE username = %s",
                     (score, st.session_state["username_q1"]),
                 )
                 conn.commit()
-                rows = cur.rowcount
-                conn.close()
-
-                if rows == 0:
+                if cur.rowcount == 0:
                     st.error("Grade update failed – user not found.")
                 else:
                     st.success("Grade successfully saved.")
-                    push_db_to_github(None)   # now a no-op
+                    push_db_to_github(None)  # no-op
+                conn.close()
             except Exception as e:
                 st.error(f"Error saving grade: {e}")
 
-# ──────────────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     show()
