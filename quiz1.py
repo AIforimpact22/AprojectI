@@ -126,7 +126,16 @@ def add_custom_css():
             font-size: 16px;
             font-weight: bold;
             margin-bottom: 10px;
-            color: #FAFAFA;
+            color: #FFD700;  /* Yellow-gold color for questions */
+        }
+        /* Style for radio options (choices) */
+        .stRadio > div > label > div {
+            color: white !important;
+            font-size: 15px;
+        }
+        /* Style for the radio buttons themselves */
+        .stRadio > div > label > div:first-child {
+            background-color: white;
         }
     </style>""", unsafe_allow_html=True)
 
