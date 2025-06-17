@@ -24,7 +24,7 @@ def _get_conn():
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
         host      = cfg["host"],
-        port      = int(cfg.get("port", 3306)),
+        port      = int(cfg.get("port", 8081)),
         user      = cfg["user"],
         password  = cfg["password"],
         database  = cfg["database"],
