@@ -220,7 +220,6 @@ def show():
                 sys.stdout = sys_stdout_original
                 st.session_state["captured_output"] = captured.getvalue()
 
-                # Check for folium.Map or DataFrame in namespace
                 for obj in local_context.values():
                     if isinstance(obj, folium.Map):
                         st.session_state["map_object"] = obj
@@ -232,7 +231,6 @@ def show():
                 sys.stdout = sys_stdout_original
                 st.error(f"Error while running code: {e}")
 
-        # Display captured output / map / dataframe
         if st.session_state["run_success"]:
             if st.session_state["captured_output"]:
                 st.markdown("### 📄 Captured Output")
@@ -249,54 +247,42 @@ def show():
                 st.markdown("### 📊 DataFrame Output")
                 st.dataframe(st.session_state["dataframe_object"])
 
-        # ──────────────────────────────────────────────────────────
-        # Submit button – update grade in MySQL
-        # ──────────────────────────────────────────────────────────
         if st.button("Submit Code"):
             if not st.session_state.get("run_success"):
                 st.error("Please run your code successfully before submitting.")
             else:
-                # Grade using existing grading function
                 from grades.grade1 import grade_assignment
                 grade = grade_assignment(code_input)
 
                 if grade < 70:
-                    st.error(f"You got {grade}/100. Please try again.")
-                    return
+                    st.error(f"You got {grade}/100. Please try again. Your current grade is not recorded.")
+                else:
+                    conn = _get_conn()
+                    cur  = conn.cursor()
+                    cur.execute(
+                        "UPDATE records SET as1 = %s WHERE username = %s",
+                        (grade, st.session_state["username"]),
+                    )
+                    conn.commit()
+                    updated = cur.rowcount
+                    conn.close()
 
-                # Store grade in MySQL
-                conn = _get_conn()
-                cur  = conn.cursor()
-                cur.execute(
-                    "UPDATE records SET as1 = %s WHERE username = %s",
-                    (grade, st.session_state["username"]),
-                )
-                conn.commit()
-                updated = cur.rowcount
-                conn.close()
+                    if updated == 0:
+                        st.error("No record updated—please check the username.")
+                    else:
+                        push_db_to_github(None)
+                        conn = _get_conn()
+                        cur  = conn.cursor()
+                        cur.execute(
+                            "SELECT as1 FROM records WHERE username = %s",
+                            (st.session_state["username"],),
+                        )
+                        new_grade = cur.fetchone()[0]
+                        conn.close()
 
-                if updated == 0:
-                    st.error("No record updated—please check the username.")
-                    return
-
-                # Optional GitHub push (now a no-op)
-                push_db_to_github(None)
-
-                # Confirm result
-                conn = _get_conn()
-                cur  = conn.cursor()
-                cur.execute(
-                    "SELECT as1 FROM records WHERE username = %s",
-                    (st.session_state["username"],),
-                )
-                new_grade = cur.fetchone()[0]
-                conn.close()
-
-                st.success(f"Submission successful! Your grade: {new_grade}/100")
-
-                # Force re-enter username next time
-                st.session_state["username_entered"] = False
-                st.session_state["username"] = ""
+                        st.success(f"Submission successful! Your grade: {new_grade}/100")
+                        st.session_state["username_entered"] = False
+                        st.session_state["username"] = ""
 
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":  # pragma: no cover
