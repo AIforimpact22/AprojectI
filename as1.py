@@ -1,4 +1,4 @@
-# as1.py – MySQL version (maintaining all original functionality)
+# as1.py – MySQL version (no local .db file required)
 import streamlit as st
 import folium
 import pandas as pd
@@ -37,27 +37,26 @@ def _get_conn():
 # MAIN UI
 # --------------------------------------------------------------------------- #
 def show():
-    # Apply the custom page style
+    # Apply custom styling
     set_page_style()
 
-    # Initialize session state variables if not already set
-    if "run_success" not in st.session_state:
-        st.session_state["run_success"] = False
-    if "map_object" not in st.session_state:
-        st.session_state["map_object"] = None
-    if "dataframe_object" not in st.session_state:
-        st.session_state["dataframe_object"] = None
-    if "captured_output" not in st.session_state:
-        st.session_state["captured_output"] = ""
-    if "username_entered" not in st.session_state:
-        st.session_state["username_entered"] = False
-    if "username" not in st.session_state:
-        st.session_state["username"] = ""
+    # ──────────────────────────────────────────────────────────────
+    # Streamlit session defaults
+    # ──────────────────────────────────────────────────────────────
+    for key, default in {
+        "run_success":      False,
+        "map_object":       None,
+        "dataframe_object": None,
+        "captured_output":  "",
+        "username_entered": False,
+        "username":         "",
+    }.items():
+        st.session_state.setdefault(key, default)
 
     st.title("Assignment 1: Mapping Coordinates and Calculating Distances")
 
     # ──────────────────────────────────────────────────────────────
-    # Step 2: Review Assignment Details (ALWAYS SHOW)
+    # Step 2 (always visible) – assignment details
     # ──────────────────────────────────────────────────────────────
     st.markdown('<h1 style="color: #ADD8E6;">Step 2: Review Assignment Details</h1>', unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["Assignment Details", "Grading Details"])
@@ -71,207 +70,240 @@ def show():
         """)
     with st.expander("See More"):
         st.markdown("""
-        **Task Requirements:**
-        1. **Plot the Three Coordinates on a Map:**
-           - The coordinates represent three locations in the Kurdistan Region.
-           - Use Python libraries to plot these points on a map.
-           - The map should visually display the exact locations of the coordinates.
-        2. **Calculate the Distance Between Each Pair of Points:**
-           - Calculate the distances between the three points in kilometers.
-           - Specifically, calculate:
-             - The distance between Point 1 and Point 2.
-             - The distance between Point 2 and Point 3.
-             - The distance between Point 1 and Point 3.
-           - Add markers to the map for each coordinate.
-           - Add polylines to connect the points.
-           - Add popups to display distance information.
+        <h3 style="color: #FFD700;">Task Requirements:</h3>
+        <ol>
+        <li><strong style="color: #FFD700;">Plot the Three Coordinates on a Map:</strong>
+           <ul>
+           <li>The coordinates represent three locations in the Kurdistan Region.</li>
+           <li>Use Python libraries to plot these points on a map.</li>
+           <li>The map should visually display the exact locations of the coordinates.</li>
+           </ul>
+        </li>
+        <li><strong style="color: #FFD700;">Calculate the Distance Between Each Pair of Points:</strong>
+           <ul>
+           <li>Calculate the distances between the three points in kilometers.</li>
+           <li>Specifically, calculate:
+             <ul>
+             <li>The distance between Point 1 and Point 2.</li>
+             <li>The distance between Point 2 and Point 3.</li>
+             <li>The distance between Point 1 and Point 3.</li>
+             </ul>
+           </li>
+           <li>Add markers to the map for each coordinate.</li>
+           <li>Add polylines to connect the points.</li>
+           <li>Add popups to display distance information.</li>
+           </ul>
+        </li>
+        </ol>
         
-        **Coordinates:**
-        - Point 1: Latitude: 36.325735, Longitude: 43.928414
-        - Point 2: Latitude: 36.393432, Longitude: 44.586781
-        - Point 3: Latitude: 36.660477, Longitude: 43.840174
-        """)
+        <h3 style="color: #FFD700;">Coordinates:</h3>
+        <ul>
+        <li>Point 1: Latitude: 36.325735, Longitude: 43.928414</li>
+        <li>Point 2: Latitude: 36.393432, Longitude: 44.586781</li>
+        <li>Point 3: Latitude: 36.660477, Longitude: 43.840174</li>
+        </ul>
+        """, unsafe_allow_html=True)
     with tab2:
         st.markdown("""
-        ### Detailed Grading Breakdown
-        - **Code Structure and Implementation:** 30 points
-        - **Map Visualization:** 40 points
-        - **Distance Calculations:** 30 points
-        """)
+        <h3 style="color: #FFD700;">Detailed Grading Breakdown</h3>
+        <ul>
+        <li><strong>Code Structure and Implementation:</strong> 30 points</li>
+        <li><strong>Map Visualization:</strong> 40 points</li>
+        <li><strong>Distance Calculations:</strong> 30 points</li>
+        </ul>
+        """, unsafe_allow_html=True)
         st.markdown("""
-        #### 1. Code Structure and Implementation (30 points)
-        - **Library Imports (5 points):**
-            - Checks if the required libraries (folium, geopy, geodesic) are imported.
-        - **Coordinate Handling (5 points):**
-            - Checks if the correct coordinates are defined in the code.
-        - **Code Execution (10 points):**
-            - Checks if the code runs without errors.
-        - **Code Quality (10 points):**
-            - **Variable Naming:** 2 points (deducted if single-letter variables are used).
-            - **Spacing:** 2 points (deducted if improper spacing is found).
-            - **Comments:** 2 points (deducted if no comments are present).
-            - **Code Organization:** 2 points (deducted if no blank lines are used for separation).
-        """)
+        <h4 style="color: #FFD700;">1. Code Structure and Implementation (30 points)</h4>
+        <ul>
+        <li><strong>Library Imports (5 points):</strong>
+            <ul><li>Checks if the required libraries (folium, geopy, geodesic) are imported.</li></ul>
+        </li>
+        <li><strong>Coordinate Handling (5 points):</strong>
+            <ul><li>Checks if the correct coordinates are defined in the code.</li></ul>
+        </li>
+        <li><strong>Code Execution (10 points):</strong>
+            <ul><li>Checks if the code runs without errors.</li></ul>
+        </li>
+        <li><strong>Code Quality (10 points):</strong>
+            <ul>
+            <li><strong>Variable Naming:</strong> 2 points (deducted if single-letter variables are used).</li>
+            <li><strong>Spacing:</strong> 2 points (deducted if improper spacing is found).</li>
+            <li><strong>Comments:</strong> 2 points (deducted if no comments are present).</li>
+            <li><strong>Code Organization:</strong> 2 points (deducted if no blank lines are used for separation).</li>
+            </ul>
+        </li>
+        </ul>
+        """, unsafe_allow_html=True)
         with st.expander("See More"):
             st.markdown("""
-            #### 2. Map Visualization (40 points)
-            - **Map Generation (15 points):**
-                - Checks if the folium.Map is correctly initialized.
-            - **Markers (15 points):**
-                - Checks if markers are added for each coordinate.
-            - **Polylines (5 points):**
-                - Checks if polylines connect the points.
-            - **Popups (5 points):**
-                - Checks if popups are added to the markers.
-            #### 3. Distance Calculations (30 points)
-            - **Geodesic Implementation (10 points):**
-                - Checks if the geodesic function is used correctly.
-            - **Distance Accuracy (20 points):**
-                - Checks if the calculated distances are accurate within a 100-meter tolerance.
-            """)
+            <h4 style="color: #FFD700;">2. Map Visualization (40 points)</h4>
+            <ul>
+            <li><strong>Map Generation (15 points):</strong>
+                <ul><li>Checks if the folium.Map is correctly initialized.</li></ul>
+            </li>
+            <li><strong>Markers (15 points):</strong>
+                <ul><li>Checks if markers are added for each coordinate.</li></ul>
+            </li>
+            <li><strong>Polylines (5 points):</strong>
+                <ul><li>Checks if polylines connect the points.</li></ul>
+            </li>
+            <li><strong>Popups (5 points):</strong>
+                <ul><li>Checks if popups are added to the markers.</li></ul>
+            </li>
+            </ul>
+            <h4 style="color: #FFD700;">3. Distance Calculations (30 points)</h4>
+            <ul>
+            <li><strong>Geodesic Implementation (10 points):</strong>
+                <ul><li>Checks if the geodesic function is used correctly.</li></ul>
+            </li>
+            <li><strong>Distance Accuracy (20 points):</strong>
+                <ul><li>Checks if the calculated distances are accurate within a 100-meter tolerance.</li></ul>
+            </li>
+            </ul>
+            """, unsafe_allow_html=True)
 
     # ──────────────────────────────────────────────────────────────
-    # Step 1: Enter Your Username
+    # Step 1 – username entry / validation
     # ──────────────────────────────────────────────────────────────
-    st.markdown('<h1 style="color: #ADD8E6;">Step 1: Enter Your Username</h1>', unsafe_allow_html=True)
+    st.markdown(
+        '<h1 style="color:#ADD8E6;">Step 1: Enter Your Username</h1>',
+        unsafe_allow_html=True,
+    )
     username_input = st.text_input("Username", key="as1_username")
-    enter_username = st.button("Enter")
-    if enter_username and username_input:
-        conn = _get_conn()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM records WHERE username = %s", (username_input,))
-        user_record = cursor.fetchone()
-        conn.close()
-
-        if user_record:
-            st.session_state["username_entered"] = True
-            st.session_state["username"] = username_input
-            st.success(f"Welcome, {username_input}!")
+    if st.button("Enter"):
+        if not username_input:
+            st.error("Please enter a username.")
         else:
-            st.error("Invalid username. Please enter a registered username.")
-            st.session_state["username_entered"] = False
+            conn = _get_conn()
+            cur  = conn.cursor()
+            cur.execute(
+                "SELECT 1 FROM records WHERE username = %s LIMIT 1",
+                (username_input,),
+            )
+            exists = cur.fetchone() is not None
+            conn.close()
+
+            if exists:
+                st.session_state["username_entered"] = True
+                st.session_state["username"]         = username_input
+                st.success(f"Welcome, {username_input}!")
+            else:
+                st.error("Invalid username. Please enter a registered username.")
+                st.session_state["username_entered"] = False
 
     # ──────────────────────────────────────────────────────────────
-    # Step 3: Run and Submit Your Code (only if user is logged in)
+    # Step 3 – code input / execution / grading
     # ──────────────────────────────────────────────────────────────
-    if st.session_state.get("username_entered", False):
-        st.markdown('<h1 style="color: #ADD8E6;">Step 3: Run and Submit Your Code</h1>', unsafe_allow_html=True)
-        st.markdown('<p style="color: white;">📝 Paste Your Code Here</p>', unsafe_allow_html=True)
-        code_input = st.text_area("", height=300)
+    if st.session_state.get("username_entered"):
+        st.markdown(
+            '<h1 style="color:#ADD8E6;">Step 3: Run and Submit Your Code</h1>',
+            unsafe_allow_html=True,
+        )
+        code_input = st.text_area("📝 Paste Your Code Here", height=300)
 
-        # Run Code Button
-        run_button = st.button("Run Code", key="run_code_button")
-        if run_button and code_input:
-            st.session_state["run_success"] = False
-            st.session_state["captured_output"] = ""
+        if st.button("Run Code"):
+            st.session_state.update(
+                run_success=False,
+                captured_output="",
+                map_object=None,
+                dataframe_object=None,
+            )
             try:
-                from io import StringIO
+                captured = StringIO()
                 import sys
+                sys_stdout_original = sys.stdout
+                sys.stdout = captured
 
-                captured_output = StringIO()
-                sys.stdout = captured_output
-
-                # Execute the user's code in a controlled environment
                 local_context = {}
                 exec(code_input, {}, local_context)
 
-                # Restore stdout
-                sys.stdout = sys.__stdout__
+                sys.stdout = sys_stdout_original
+                st.session_state["captured_output"] = captured.getvalue()
 
-                # Capture printed output
-                st.session_state["captured_output"] = captured_output.getvalue()
-
-                # Look for specific outputs (folium.Map, pandas.DataFrame)
-                map_object = next((obj for obj in local_context.values() if isinstance(obj, folium.Map)), None)
-                dataframe_object = next((obj for obj in local_context.values() if isinstance(obj, pd.DataFrame)), None)
-
-                st.session_state["map_object"] = map_object
-                st.session_state["dataframe_object"] = dataframe_object
+                # Check for folium.Map or DataFrame in namespace
+                for obj in local_context.values():
+                    if isinstance(obj, folium.Map):
+                        st.session_state["map_object"] = obj
+                    elif isinstance(obj, pd.DataFrame):
+                        st.session_state["dataframe_object"] = obj
 
                 st.session_state["run_success"] = True
-
+                st.rerun()  # Force refresh to show outputs
             except Exception as e:
-                sys.stdout = sys.__stdout__
-                st.error(f"An error occurred while running your code: {e}")
+                sys.stdout = sys_stdout_original
+                st.error(f"Error while running code: {e}")
 
+        # Display captured output / map / dataframe
         if st.session_state["run_success"]:
-            st.markdown('<h3 style="color: white;">📄 Captured Output</h3>', unsafe_allow_html=True)
             if st.session_state["captured_output"]:
-                formatted_output = st.session_state["captured_output"].replace('\n', '<br>')
+                st.markdown("### 📄 Captured Output")
                 st.markdown(
-                    f'<pre style="color: white; white-space: pre-wrap; word-wrap: break-word;">{formatted_output}</pre>',
-                    unsafe_allow_html=True
+                    f'<pre style="color:white;white-space:pre-wrap;">'
+                    f'{st.session_state["captured_output"].replace(chr(10), "<br>")}'
+                    "</pre>",
+                    unsafe_allow_html=True,
                 )
-            else:
-                st.markdown('<p style="color: white;">No text output captured.</p>', unsafe_allow_html=True)
-
             if st.session_state["map_object"]:
                 st.markdown("### 🗺️ Map Output")
                 st_folium(st.session_state["map_object"], width=1000, height=500)
-
             if st.session_state["dataframe_object"] is not None:
                 st.markdown("### 📊 DataFrame Output")
                 st.dataframe(st.session_state["dataframe_object"])
 
-        # ──────────────────────────────────────────────────────────────
-        # Submit Code Button (updates grade in MySQL)
-        # ──────────────────────────────────────────────────────────────
-        submit_button = st.button("Submit Code", key="submit_code_button")
-        if submit_button:
-            if not st.session_state.get("run_success", False):
+        # ──────────────────────────────────────────────────────────
+        # Submit button – update grade in MySQL
+        # ──────────────────────────────────────────────────────────
+        if st.button("Submit Code"):
+            if not st.session_state.get("run_success"):
                 st.error("Please run your code successfully before submitting.")
-            elif st.session_state.get("username", "").strip():
-                # Grade the submission using your grading function
-                from grades.grade1 import grade_assignment
-                grade = grade_assignment(code_input)
+            else:
+                try:
+                    # Grade using existing grading function
+                    from grades.grade1 import grade_assignment
+                    grade = grade_assignment(code_input)
 
-                # Check if grade is less than 70. If so, do not update DB
-                if grade < 70:
-                    st.error(f"You got {grade}/100. Please try again.")
-                else:
-                    # Update the grade in the records table
+                    if grade < 70:
+                        st.error(f"You got {grade}/100. Please try again.")
+                        st.stop()  # Prevent further execution
+
+                    # Store grade in MySQL
                     conn = _get_conn()
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "UPDATE records SET as1 = %s WHERE username = %s", 
-                        (grade, st.session_state["username"])
+                    cur = conn.cursor()
+                    cur.execute(
+                        "UPDATE records SET as1 = %s WHERE username = %s",
+                        (grade, st.session_state["username"]),
                     )
                     conn.commit()
-                    updated_rows = cursor.rowcount
+                    updated = cur.rowcount
                     conn.close()
 
-                    if updated_rows == 0:
-                        st.error("No record updated. Please check the username or database integrity.")
+                    if updated == 0:
+                        st.error("No record updated—please check the username.")
+                        st.stop()
+
+                    # Confirm result
+                    conn = _get_conn()
+                    cur = conn.cursor()
+                    cur.execute(
+                        "SELECT as1 FROM records WHERE username = %s",
+                        (st.session_state["username"],),
+                    )
+                    result = cur.fetchone()
+                    conn.close()
+
+                    if result:
+                        new_grade = result[0]
+                        st.success(f"Submission successful! Your grade: {new_grade}/100")
+                        # Force re-enter username next time
+                        st.session_state["username_entered"] = False
+                        st.session_state["username"] = ""
+                        st.rerun()  # Refresh the page to reset the state
                     else:
-                        st.info("Grade updated in database...")
+                        st.error("Failed to retrieve updated grade.")
 
-                        # Optional GitHub push (kept for compatibility)
-                        try:
-                            push_db_to_github(None)
-                            
-                            # Confirm the updated grade
-                            conn = _get_conn()
-                            cursor = conn.cursor()
-                            cursor.execute(
-                                "SELECT as1 FROM records WHERE username = %s",
-                                (st.session_state["username"],)
-                            )
-                            result = cursor.fetchone()
-                            conn.close()
-                            
-                            if result:
-                                new_grade = result[0]
-                                st.success(f"Submission successful! Your grade: {new_grade}/100")
-                            else:
-                                st.error("Error retrieving the updated grade.")
-                        except Exception as e:
-                            st.error(f"GitHub sync error: {str(e)}")
+                except Exception as e:
+                    st.error(f"Error during submission: {str(e)}")
 
-                    # Clear username so the user must re-enter it on the next submission
-                    st.session_state["username_entered"] = False
-                    st.session_state["username"] = ""
-            else:
-                st.error("Please enter your username to submit.")
-
-if __name__ == "__main__":
+# --------------------------------------------------------------------------- #
+if __name__ == "__main__":  # pragma: no cover
     show()
