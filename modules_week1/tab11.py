@@ -1,5 +1,6 @@
 import streamlit as st
-import quiz1  # Ensure quiz1 is available in your project
+from quiz1 import show as show_quiz
 
 def show():
-    quiz1.show()
+    st.title("Quiz 1: Google Colab and Google Sheets Integration")
+    show_quiz()
