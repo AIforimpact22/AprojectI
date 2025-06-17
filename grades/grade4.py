@@ -2,7 +2,6 @@
 import streamlit as st
 import os
 import re
-from grades.grade4 import grade_assignment
 import mysql.connector
 from mysql.connector import errorcode
 
