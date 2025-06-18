@@ -6,7 +6,6 @@ from home import show_home
 from style import show_footer
 from importlib import import_module
 from github_progress import get_user_progress
-import sys
 import os
 
 def safe_rerun():
@@ -34,44 +33,53 @@ def enforce_week_gating(selected):
     return True
 
 def main():
-    st.set_page_config(page_title="Code for Impact", layout="wide")
+    # ────────────────────────────────────────────────────────────────────────────
+    # Force the sidebar to auto-expand when it appears
+    # ────────────────────────────────────────────────────────────────────────────
+    st.set_page_config(
+        page_title="Code for Impact",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
     apply_dark_theme()
     create_tables()
 
+    # ────────────────────────────────────────────────────────────────────────────
+    # Ensure we always have a page selected
+    # ────────────────────────────────────────────────────────────────────────────
     if "page" not in st.session_state:
         st.session_state["page"] = "offer"
 
     page      = st.session_state["page"]
     logged_in = st.session_state.get("logged_in", False)
 
+    # ────────────────────────────────────────────────────────────────────────────
+    # 1) Once logged in, show sidebar + handle logout/home/modules
+    # ────────────────────────────────────────────────────────────────────────────
     if logged_in:
-        # ────────────────────────────────────────────────────────────────────────────
-        # Show the sidebar only after login
-        # ────────────────────────────────────────────────────────────────────────────
+        # show sidebar only after login
         show_sidebar()
 
-        # ────────────────────────────────────────────────────────────────────────────
-        # Handle logout
-        # ────────────────────────────────────────────────────────────────────────────
+        # handle immediate logout
         if page == "logout":
             st.session_state["logged_in"] = False
             st.session_state["page"]      = "offer"
             safe_rerun()
             return
 
-        # ────────────────────────────────────────────────────────────────────────────
-        # Home page
-        # ────────────────────────────────────────────────────────────────────────────
+        # home page
         if page == "home":
             show_home()
 
-        # ────────────────────────────────────────────────────────────────────────────
-        # Other modules (week1, week2, etc.)
-        # ────────────────────────────────────────────────────────────────────────────
+        # any other module or feature
         else:
+            # gating for modules
             if page.startswith("modules_week") and not enforce_week_gating(page):
                 st.warning("You must complete the previous week before accessing this section.")
                 st.stop()
+
+            # dynamic import & run
             try:
                 module = import_module(page)
                 if hasattr(module, "show"):
@@ -81,10 +89,10 @@ def main():
             except ImportError as e:
                 st.warning("Unknown selection: " + str(e))
 
+    # ────────────────────────────────────────────────────────────────────────────
+    # 2) If not logged in, show offer/login flows—but never the sidebar
+    # ────────────────────────────────────────────────────────────────────────────
     else:
-        # ────────────────────────────────────────────────────────────────────────────
-        # Not logged in: landing, login, offer, etc.
-        # ────────────────────────────────────────────────────────────────────────────
         if page == "offer":
             import offer
             offer.show()
@@ -104,13 +112,15 @@ def main():
             appx.show()
 
         else:
+            # fallback to login
             import login
             login.show_login_create_account()
 
     # ────────────────────────────────────────────────────────────────────────────
-    # Footer always at the bottom
+    # 3) Always show the footer
     # ────────────────────────────────────────────────────────────────────────────
     show_footer()
+
 
 if __name__ == "__main__":
     main()
