@@ -55,7 +55,6 @@ def show():
     st.markdown('<h1 style="color: #ADD8E6;">Step 2: Review Assignment Details</h1>', unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["Assignment Details", "Grading Details"])
 
-    # ————————————————————————————— Assignment Details Tab —————————————————————————————
     with tab1:
         st.markdown("""
         ### Objective
@@ -65,40 +64,27 @@ def show():
         """)
         with st.expander("See More"):
             st.markdown("""
-            <h3 style="color: #FFD700;">Task Requirements:</h3>
-            <ol>
-              <li><strong style="color: #FFD700;">Plot the Three Coordinates on a Map:</strong>
-                <ul>
-                  <li>The coordinates represent three locations in the Kurdistan Region.</li>
-                  <li>Use Python libraries to plot these points on a map.</li>
-                  <li>The map should visually display the exact locations of the coordinates.</li>
-                </ul>
-              </li>
-              <li><strong style="color: #FFD700;">Calculate the Distance Between Each Pair of Points:</strong>
-                <ul>
-                  <li>Calculate the distances between the three points in kilometers.</li>
-                  <li>Specifically, calculate:
-                    <ul>
-                      <li>The distance between Point 1 and Point 2.</li>
-                      <li>The distance between Point 2 and Point 3.</li>
-                      <li>The distance between Point 1 and Point 3.</li>
-                    </ul>
-                  </li>
-                  <li>Add markers to the map for each coordinate.</li>
-                  <li>Add polylines to connect the points.</li>
-                  <li>Add popups to display distance information.</li>
-                </ul>
-              </li>
-            </ol>
-            <h3 style="color: #FFD700;">Coordinates:</h3>
-            <ul>
-              <li>Point 1: Latitude: 36.325735, Longitude: 43.928414</li>
-              <li>Point 2: Latitude: 36.393432, Longitude: 44.586781</li>
-              <li>Point 3: Latitude: 36.660477, Longitude: 43.840174</li>
-            </ul>
+            <span style="color: #FFD700;"><strong>Task Requirements:</strong></span>
+            1. <span style="color: #FFD700;"><strong>Plot the Three Coordinates on a Map:</strong></span>
+               - The coordinates represent three locations in the Kurdistan Region.
+               - Use Python libraries to plot these points on a map.
+               - The map should visually display the exact locations of the coordinates.
+            2. <span style="color: #FFD700;"><strong>Calculate the Distance Between Each Pair of Points:</strong></span>
+               - Calculate the distances between the three points in kilometers.
+               - Specifically, calculate:
+                 - The distance between Point 1 and Point 2.
+                 - The distance between Point 2 and Point 3.
+                 - The distance between Point 1 and Point 3.
+               - Add markers to the map for each coordinate.
+               - Add polylines to connect the points.
+               - Add popups to display distance information.
+
+            <span style="color: #FFD700;"><strong>Coordinates:</strong></span>
+            - Point 1: Latitude: 36.325735, Longitude: 43.928414
+            - Point 2: Latitude: 36.393432, Longitude: 44.586781
+            - Point 3: Latitude: 36.660477, Longitude: 43.840174
             """, unsafe_allow_html=True)
 
-    # ————————————————————————————— Grading Details Tab —————————————————————————————
     with tab2:
         st.markdown("""
         ### Detailed Grading Breakdown
