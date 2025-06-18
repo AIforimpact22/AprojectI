@@ -51,8 +51,8 @@ def show():
 
             if exists:
                 st.success("Username verified. Proceed to the next steps.")
-                st.session_state["verified_as4"]  = True
-                st.session_state["username_as4"] = username
+                st.session_state["verified_as4"]   = True
+                st.session_state["username_as4"]  = username
             else:
                 st.error("Invalid username. Please use a registered username.")
                 st.session_state["verified_as4"] = False
@@ -69,12 +69,12 @@ def show():
         
         with tab1:
             st.markdown("""
-            ### Objective:
+            <span style="color:#FFD700;"><strong>Objective:</strong></span>
             In this assignment, you will use Python image processing libraries to analyze a black-and-white image, detect rectangular shapes, and determine the coordinates of each rectangle.
-            """)
+            """, unsafe_allow_html=True)
         with st.expander("See More"):
             st.markdown("""
-                #### Instructions:
+                <span style="color:#FFD700;"><strong>Set Up Your Environment:</strong></span>
                 1. **Set Up Your Environment:**
                    - Open a new Google Colab notebook.
                    - Import the necessary libraries:
@@ -82,38 +82,43 @@ def show():
                      - `numpy` for numerical operations
                      - `matplotlib` for displaying images
 
+                <span style="color:#FFD700;"><strong>Load the Image:</strong></span>
                 2. **Load the Image:**
                    - Download the provided image and upload it to Google Colab.
                    - Load the image using OpenCV.
 
+                <span style="color:#FFD700;"><strong>Convert the Image to Grayscale and Apply Thresholding:</strong></span>
                 3. **Convert the Image to Grayscale and Apply Thresholding:**
                    - Convert the image to grayscale.
                    - Use binary thresholding to make it easier to detect the rectangular shapes. This will turn the rectangles into clear white shapes against a black background.
 
+                <span style="color:#FFD700;"><strong>Detect Contours:</strong></span>
                 4. **Detect Contours:**
                    - Use OpenCV’s `findContours` function to detect all contours in the image.
                    - Filter out contours that are not rectangular shapes.
 
+                <span style="color:#FFD700;"><strong>Filter and Identify Rectangles:</strong></span>
                 5. **Filter and Identify Rectangles:**
                    - For each contour, approximate its shape using `cv2.approxPolyDP`.
                    - If the contour has four points, consider it a rectangle.
                    - Calculate the bounding box coordinates of each rectangle using `cv2.boundingRect`.
 
+                <span style="color:#FFD700;"><strong>Extract and Print the Coordinates:</strong></span>
                 6. **Extract and Print the Coordinates:**
                    - For each detected rectangle, print the top-left and bottom-right coordinates.
                    - Display the original image with the rectangles outlined for verification.
-                """)
+                """, unsafe_allow_html=True)
             st.image("correct_files/BW.jpg")
                             
         with tab2:
             st.markdown("""
-            ### Detailed Grading Breakdown:
+            <span style="color:#FFD700;"><strong>Detailed Grading Breakdown:</strong></span>
             1. **Library Imports (20 Points)**
             2. **Code Quality (14 Points)**
             3. **Rectangle Coordinates (56 Points)**
             4. **Thresholded Image (5 Points)**
-            5. **Image with Rectangles Outlined (5 Points)
-            """)
+            5. **Image with Rectangles Outlined (5 Points)**
+            """, unsafe_allow_html=True)
 
         # ─────────────────────────────────────────────
         # Step 3: Submit Your Assignment
