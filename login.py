@@ -1,22 +1,24 @@
 # login.py – user authentication + registration (MySQL only, no GitHub backup)
 import streamlit as st
 import mysql.connector
-from mysql.connector import errorcode, IntegrityError
+from mysql.connector import IntegrityError
 import smtplib
 from email.message import EmailMessage
 import datetime
 
 from database import create_tables
 from theme import apply_dark_theme
-
+from mysql.connector import pooling
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Cached DB helper – avoids reconnect on every call
+# Initialize a MySQL connection pool once per session
 # ──────────────────────────────────────────────────────────────────────────────
-@st.cache(allow_output_mutation=True)
-def _get_conn():
+@st.cache_resource
+def init_conn_pool():
     cfg = st.secrets["mysql"]
-    return mysql.connector.connect(
+    return pooling.MySQLConnectionPool(
+        pool_name="mypool_login",
+        pool_size=5,
         host=cfg["host"],
         port=int(cfg.get("port", 3306)),
         user=cfg["user"],
@@ -24,6 +26,10 @@ def _get_conn():
         database=cfg["database"],
         autocommit=False,
     )
+
+def get_conn():
+    """Get a fresh connection from the pool."""
+    return init_conn_pool().get_connection()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -69,12 +75,13 @@ def register_user(fullname, email, phone, username, password, date_of_joining):
     Registers a new user in the MySQL database with approved status 0.
     Returns True on success, False otherwise.
     """
-    conn = _get_conn()
+    conn = get_conn()
     cur  = conn.cursor()
 
     # Ensure password is unique
     cur.execute("SELECT 1 FROM users WHERE password = %s", (password,))
     if cur.fetchone():
+        cur.close()
         conn.close()
         return False
 
@@ -89,9 +96,11 @@ def register_user(fullname, email, phone, username, password, date_of_joining):
         )
         conn.commit()
     except IntegrityError:
+        cur.close()
         conn.close()
         return False
 
+    cur.close()
     conn.close()
     return True
 
@@ -102,13 +111,14 @@ def login_user(username, password):
     Returns the user row if valid and approved, "not_approved" if not approved,
     or None if invalid.
     """
-    conn = _get_conn()
+    conn = get_conn()
     cur  = conn.cursor()
     cur.execute(
         "SELECT * FROM users WHERE username = %s AND password = %s",
         (username, password),
     )
     user = cur.fetchone()
+    cur.close()
     conn.close()
 
     if user:
@@ -188,13 +198,14 @@ def show_login_create_account():
             if not forgot_email:
                 st.error("Please enter an email address.")
             else:
-                conn = _get_conn()
+                conn = get_conn()
                 cur  = conn.cursor()
                 cur.execute(
                     "SELECT username, password FROM users WHERE email = %s",
                     (forgot_email,),
                 )
                 result = cur.fetchone()
+                cur.close()
                 conn.close()
 
                 if result:
