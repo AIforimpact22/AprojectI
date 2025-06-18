@@ -10,40 +10,44 @@ Public functions (unchanged):
 
 import streamlit as st
 import mysql.connector
-from mysql.connector import errorcode
+from mysql.connector import errorcode, OperationalError
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Robust connection helper: persistent and auto-reconnect
+# Robust connection helper: persistent and auto-reconnect, handles SSL issues
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_conn():
-    """Get (and persist) a working MySQL connection in session_state."""
+    """Get (and persist) a working MySQL connection in session_state (no SSL)."""
     cfg = st.secrets["mysql"]
     key = "_mysql_conn"
-    if key not in st.session_state or not _is_conn_alive(st.session_state[key]):
-        try:
-            st.session_state[key] = mysql.connector.connect(
-                host      = cfg["host"],
-                port      = int(cfg.get("port", 3306)),
-                user      = cfg["user"],
-                password  = cfg["password"],
-                database  = cfg["database"],
-                autocommit=False,
-                use_pure  = True,
-                connection_timeout=10,
-            )
-        except Exception as e:
-            st.error(f"DB connect error: {e}")
-            raise
-    return st.session_state[key]
 
-def _is_conn_alive(conn):
-    """Returns True if connection is open and healthy."""
-    try:
-        conn.ping(reconnect=True, attempts=1, delay=0)
-        return True
-    except Exception:
-        return False
+    def connect():
+        # Disable SSL if not needed
+        return mysql.connector.connect(
+            host      = cfg["host"],
+            port      = int(cfg.get("port", 3306)),
+            user      = cfg["user"],
+            password  = cfg["password"],
+            database  = cfg["database"],
+            autocommit=False,
+            use_pure  = True,
+            connection_timeout=10,
+            ssl_disabled=True,        # <<---- IMPORTANT LINE!
+        )
+
+    # Ensure connection and auto-reconnect if stale/dead
+    conn = st.session_state.get(key)
+    if conn is None:
+        conn = connect()
+        st.session_state[key] = conn
+    else:
+        try:
+            conn.ping(reconnect=True, attempts=1, delay=0)
+        except Exception:
+            # Connection is dead or lost, so reconnect
+            conn = connect()
+            st.session_state[key] = conn
+    return conn
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Schema bootstrap (idempotent)
