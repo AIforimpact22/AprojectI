@@ -5,7 +5,7 @@ import mysql.connector
 from mysql.connector import errorcode
 
 def _get_conn():
-    """Return a brand‐new MySQL connection from Streamlit secrets."""
+    """Return a fresh MySQL connection from Streamlit secrets."""
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
         host       = cfg["host"],
@@ -19,11 +19,11 @@ def _get_conn():
 
 def create_tables():
     """
-    Ensure all required tables exist. Opens a new connection for each CREATE
+    Ensure all required tables exist. Opens a fresh connection for each CREATE
     statement to avoid stale‐socket ping errors.
     """
-    # List your CREATE statements here, one per entry
     ddl_statements = [
+        # USERS table: use DATETIME DEFAULT CURRENT_TIMESTAMP
         """
         CREATE TABLE IF NOT EXISTS users (
             fullname VARCHAR(100),
@@ -31,10 +31,12 @@ def create_tables():
             phone BIGINT,
             username VARCHAR(50) PRIMARY KEY,
             password VARCHAR(100),
-            date_of_joining DATE DEFAULT CURRENT_DATE,
+            date_of_joining DATETIME DEFAULT CURRENT_TIMESTAMP,
             approved TINYINT DEFAULT 0
         )
         """,
+
+        # RECORDS table
         """
         CREATE TABLE IF NOT EXISTS records (
             username VARCHAR(50) PRIMARY KEY,
@@ -44,6 +46,7 @@ def create_tables():
             as4 INT DEFAULT NULL
         )
         """,
+
         # … add any additional CREATE TABLE statements here …
     ]
 
@@ -56,7 +59,7 @@ def create_tables():
             cur.execute(stmt)
             conn.commit()
         except mysql.connector.Error as e:
-            # Ignore "table already exists" errors, warn on others
+            # Ignore "table already exists" errors; warn on others
             if e.errno not in (errorcode.ER_TABLE_EXISTS_ERROR,):
                 st.warning(f"Error creating table: {e.msg}")
         finally:
