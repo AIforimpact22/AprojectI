@@ -5,7 +5,6 @@ from mysql.connector import IntegrityError
 import smtplib
 from email.message import EmailMessage
 import datetime
-
 from database import create_tables
 from theme import apply_dark_theme
 from mysql.connector import pooling
@@ -33,7 +32,7 @@ def get_conn():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Email helper                                                                 │
+# Email helper
 # ──────────────────────────────────────────────────────────────────────────────
 def send_password_email(recipient_email, username, password):
     """
@@ -68,7 +67,7 @@ def send_password_email(recipient_email, username, password):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# DB operations                                                               │
+# DB operations
 # ──────────────────────────────────────────────────────────────────────────────
 def register_user(fullname, email, phone, username, password, date_of_joining):
     """
@@ -129,7 +128,7 @@ def login_user(username, password):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# UI                                                                          │
+# UI
 # ──────────────────────────────────────────────────────────────────────────────
 def show_login_create_account():
     """
@@ -140,7 +139,6 @@ def show_login_create_account():
 
     tabs = st.tabs(["Login", "Create Account", "Forgot Password"])
 
-    # ─────────────────────────
     # LOGIN TAB
     with tabs[0]:
         st.subheader("🔑 Login")
@@ -152,14 +150,13 @@ def show_login_create_account():
                 st.error("Your account has not been approved yet. Please wait for admin approval.")
             elif user:
                 st.session_state["logged_in"] = True
-                st.session_state["username"]   = username
-                st.session_state["page"]       = "home"
+                st.session_state["username"]  = username
+                st.session_state["page"]      = "home"
                 st.success("✅ Login successful!")
                 st.rerun()
             else:
                 st.error("❌ Invalid username or password.")
 
-    # ─────────────────────────
     # CREATE ACCOUNT TAB
     with tabs[1]:
         st.subheader("🆕 Create Account")
@@ -189,7 +186,6 @@ def show_login_create_account():
             else:
                 st.error("⚠️ Please fill out all fields.")
 
-    # ─────────────────────────
     # FORGOT PASSWORD TAB
     with tabs[2]:
         st.subheader("🔒 Forgot Password")
@@ -218,6 +214,5 @@ def show_login_create_account():
                     st.error("This email is not registered in our system.")
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     show_login_create_account()
