@@ -1,18 +1,19 @@
-# as3.py  – MySQL edition (no local .db file)
+# as4.py  – MySQL edition (no local .db file)
 import streamlit as st
 import os
-from grades.grade3 import grade_assignment
+import re
+from grades.grade4 import grade_assignment
 import mysql.connector
 from mysql.connector import errorcode
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Optional GitHub-push stub (keeps old call sites alive after file removal)
+# Optional GitHub-push stub (keeps call-sites alive after file removal)
 # ──────────────────────────────────────────────────────────────────────────────
 try:
     from github_sync import push_db_to_github        # noqa: F401
 except ModuleNotFoundError:
     def push_db_to_github(*_args, **_kwargs):        # noqa: D401
-        """No-op – data is already in MySQL."""
+        """No-op – data lives in MySQL."""
         return {"success": True}
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ def _get_conn():
 # Cache username verification to avoid repeat queries
 # ──────────────────────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
-def username_exists(username: str) -> bool:
+def username_exists_as4(username: str) -> bool:
     conn = _get_conn()
     cur  = conn.cursor()
     cur.execute("SELECT 1 FROM records WHERE username = %s LIMIT 1", (username,))
@@ -47,169 +48,159 @@ def username_exists(username: str) -> bool:
 # MAIN UI
 # ──────────────────────────────────────────────────────────────────────────────
 def show():
-    st.title("Assignment 3: Data Processing and Visualization in Python")
-
-    # inject widget-label CSS (unchanged)
-    st.markdown(
-        """
-        <style>
-        .stTextArea label, .stFileUploader label { color: white !important; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.title("Assignment 4: Image Analysis and Rectangle Detection")
 
     # ─────────────────────────────────────────────
     # Step 1 – username validation
     # ─────────────────────────────────────────────
-    st.markdown(
-        '<h1 style="color:#ADD8E6;">Step 1: Enter Your Username</h1>',
-        unsafe_allow_html=True,
-    )
-    username = st.text_input("Enter Your Username", key="as3_username_input")
-    if st.button("Verify Username", key="as3_verify_button") and username:
+    st.markdown("<h2 style='color:#ADD8E6;'>Step 1: Enter Your Username</h2>", unsafe_allow_html=True)
+    username = st.text_input("Enter Your Username", key="as4_username_input")
+    if st.button("Verify Username", key="as4_verify_button") and username:
         try:
-            if username_exists(username):
+            if username_exists_as4(username):
                 st.success("Username verified. Proceed to the next steps.")
-                st.session_state["verified_as3"]   = True
-                st.session_state["username_as3"]   = username
+                st.session_state["verified_as4"]  = True
+                st.session_state["username_as4"]  = username
             else:
-                st.error("Invalid username. Please enter a registered username.")
-                st.session_state["verified_as3"] = False
+                st.error("Invalid username. Please use a registered username.")
+                st.session_state["verified_as4"] = False
         except Exception as e:
             st.error(f"Error verifying username: {e}")
-            st.session_state["verified_as3"] = False
+            st.session_state["verified_as4"] = False
 
     # ─────────────────────────────────────────────
     # Step 2: Review Assignment Details & Grading
     # ─────────────────────────────────────────────
-    if st.session_state.get("verified_as3", False):
-        st.markdown(
-            '<h1 style="color:#ADD8E6;">Step 2: Review Assignment Details</h1>',
-            unsafe_allow_html=True,
-        )
+    if st.session_state.get("verified_as4", False):
+        st.markdown("<h2 style='color:#ADD8E6;'>Step 2: Review Assignment Details</h2>", unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["Assignment Details", "Grading Details"])
         
         with tab1:
             st.markdown("""
             <span style="color:#FFD700;"><strong>Objective:</strong></span>
-            In this assignment, students will work with geographical temperature data and apply Python programming to perform data manipulation and visualization. The task is broken into three stages, with each stage encapsulating a specific function. By the end of the assignment, students will merge the functions into one script to complete the task efficiently.
+            In this assignment, you will use Python image processing libraries to analyze a black-and-white image, detect rectangular shapes, and determine the coordinates of each rectangle.
             """, unsafe_allow_html=True)
             with st.expander("See More"):
                 st.markdown("""
-                <span style="color:#FFD700;"><strong>Stage 1: Filtering Data Below 25°C</strong></span>
-                **Goal:** Create a new tab in the spreadsheet containing only the data points where the temperature is below 25°C.
+                <span style="color:#FFD700;"><strong>Set Up Your Environment:</strong></span>
+                - Open a new Google Colab notebook.
+                - Import the necessary libraries:
+                  - `cv2` (OpenCV) for image processing
+                  - `numpy` for numerical operations
+                  - `matplotlib` for displaying images
 
-                **Instructions:**
-                - Load the provided Excel file containing longitude, latitude, and temperature data.
-                - Write a Python script that filters out all the rows where the temperature is below 25°C.
-                - Save this filtered data in a new sheet within the same Excel file, naming the new sheet "Below_25".
+                <span style="color:#FFD700;"><strong>Load the Image:</strong></span>
+                - Download the provided image and upload it to Google Colab.
+                - Load the image using OpenCV.
 
-                **Deliverable:** A script that filters and saves the data in the "Below_25" tab of the Excel file.
+                <span style="color:#FFD700;"><strong>Convert the Image to Grayscale and Apply Thresholding:</strong></span>
+                - Convert the image to grayscale.
+                - Use binary thresholding to make it easier to detect the rectangular shapes. This will turn the rectangles into clear white shapes against a black background.
 
-                **File:** [Temperature Data](https://docs.google.com/spreadsheets/d/1EA4iram3ngYgTIuoKHCciKj1KBxpUqG1CwkyW71wUYU/edit?gid=1798066675#gid=1798066675)
+                <span style="color:#FFD700;"><strong>Detect Contours:</strong></span>
+                - Use OpenCV’s `findContours` function to detect all contours in the image.
+                - Filter out contours that are not rectangular shapes.
 
-                <span style="color:#FFD700;"><strong>Stage 2: Filtering Data Above 25°C</strong></span>
-                **Goal:** Create another tab in the spreadsheet containing only the data points where the temperature is above 25°C.
+                <span style="color:#FFD700;"><strong>Filter and Identify Rectangles:</strong></span>
+                - For each contour, approximate its shape using `cv2.approxPolyDP`.
+                - If the contour has four points, consider it a rectangle.
+                - Calculate the bounding box coordinates of each rectangle using `cv2.boundingRect`.
 
-                **Instructions:**
-                - Extend your script to filter out all the rows where the temperature is above 25°C.
-                - Save this filtered data in a new sheet named "Above_25".
-
-                **Deliverable:** A script that adds the "Above_25" tab to the Excel file.
-
-                <span style="color:#FFD700;"><strong>Stage 3: Visualizing Data on a Map</strong></span>
-                **Goal:** Visualize the data points from both the "Below_25" and "Above_25" tabs on a geographical map.
-
-                **Instructions:**
-                - Using a Python mapping library (such as folium, matplotlib, or plotly), plot the data points from both the "Below_25" and "Above_25" tabs.
-                - Use blue to represent the data points from the "Below_25" tab and red for the "Above_25" tab.
-                - Ensure the map accurately displays the temperature data at the correct coordinates.
-
-                **Deliverable:** A Python script that generates a map displaying the data points in blue and red.
-
-                <span style="color:#FFD700;"><strong>Final Task: Merging the Scripts</strong></span>
-                **Goal:** Combine all three stages into one cohesive Python script that performs the filtering and visualization tasks in sequence.
-
-                **Instructions:**
-                - Encapsulate the functionality of the three scripts (Stage 1, Stage 2, and Stage 3) into distinct functions.
-                - Write a master function that calls these functions in sequence:
-                    1. Filter the data below 25°C and save it to a new tab.
-                    2. Filter the data above 25°C and save it to another tab.
-                    3. Visualize both sets of data on a map.
-                - Ensure that the final script runs all the steps seamlessly.
-
-                **Deliverable:** A Python script that completes the entire task, from filtering the data to visualizing it on a map.
+                <span style="color:#FFD700;"><strong>Extract and Print the Coordinates:</strong></span>
+                - For each detected rectangle, print the top-left and bottom-right coordinates.
+                - Display the original image with the rectangles outlined for verification.
                 """, unsafe_allow_html=True)
+                st.image("correct_files/BW.jpg")
         
         with tab2:
             st.markdown("""
             <span style="color:#FFD700;"><strong>Detailed Grading Breakdown:</strong></span>
-
-            <span style="color:#FFD700;"><strong>1. Code Grading (40 Points Total)</strong></span>
-            - **Library Imports (15 Points)**
-            - **Code Quality (10 Points)**
-            - **Sheet Creation (15 Points)**
-            - Should create "Below_25" tab.
-            - Should create "Above_25" tab.
-
-            <span style="color:#FFD700;"><strong>2. HTML File Grading (20 Points Total)</strong></span>
-
-            <span style="color:#FFD700;"><strong>3. Excel File Grading (40 Points Total)</strong></span>
-            - **Correct Sheets (15 Points):**
-              - The Excel file should have three sheets: "Sheet1", "Above_25", and "Below_25".
-            - **Correct Columns (15 Points):**
-              - Must include ("longitude", "latitude", "temperature").
-            - **Row Count for "Above_25" (10 Points)**
+            1. **Library Imports (20 Points)**
+            2. **Code Quality (14 Points)**
+            3. **Rectangle Coordinates (56 Points)**
+            4. **Thresholded Image (5 Points)**
+            5. **Image with Rectangles Outlined (5 Points)**
             """, unsafe_allow_html=True)
 
         # ─────────────────────────────────────────────
-        # Step 3 – code input
+        # Step 3: Submit Your Assignment
         # ─────────────────────────────────────────────
-        st.markdown(
-            '<h1 style="color:#ADD8E6;">Step 3: Submit Your Assignment</h1>',
-            unsafe_allow_html=True,
-        )
-        code_input = st.text_area("📝 Paste Your Code Here", height=300, key="as3_code_input")
+        st.markdown("<h2 style='color:#ADD8E6;'>Step 3: Submit Your Assignment</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='color:white;font-weight:bold;'>📝 Paste Your Code Here</p>", unsafe_allow_html=True)
+        code_input = st.text_area("", height=300, key="as4_code_input")
 
         # ─────────────────────────────────────────────
-        # Step 4 – uploads
+        # Step 4: Enter Rectangle Coordinates
         # ─────────────────────────────────────────────
-        st.markdown(
-            '<h1 style="color:#ADD8E6;">Step 4: Upload Your HTML and Excel Files</h1>',
-            unsafe_allow_html=True,
-        )
-        uploaded_html  = st.file_uploader("Upload your HTML file (Map)",   type=["html"], key="as3_uploaded_html")
-        uploaded_excel = st.file_uploader("Upload your Excel file",        type=["xlsx"], key="as3_uploaded_excel")
-        all_uploaded = all([uploaded_html, uploaded_excel])
-        st.write("All files uploaded:", "✅ Yes" if all_uploaded else "❌ No")
+        st.markdown("<h2 style='color:#ADD8E6;'>Step 4: Enter Rectangle Coordinates</h2>", unsafe_allow_html=True)
+        rectangle_coordinates = st.text_area("", height=150, key="as4_rectangle_coordinates")
 
         # ─────────────────────────────────────────────
-        # Submit button
+        # Step 5: Upload Your Thresholded Image
         # ─────────────────────────────────────────────
-        if all_uploaded and st.button("Submit Assignment", key="as3_submit_button"):
+        st.markdown("<h2 style='color:#ADD8E6;'>Step 5: Upload Your Thresholded Image</h2>", unsafe_allow_html=True)
+        uploaded_thresholded_image = st.file_uploader("", type=["png", "jpg", "jpeg"], key="as4_thresholded_image")
+
+        # ─────────────────────────────────────────────
+        # Step 6: Upload Image with Rectangles Outlined
+        # ─────────────────────────────────────────────
+        st.markdown("<h2 style='color:#ADD8E6;'>Step 6: Upload Image with Rectangles Outlined</h2>", unsafe_allow_html=True)
+        uploaded_outlined_image = st.file_uploader("", type=["png", "jpg", "jpeg"], key="as4_outlined_image")
+
+        if st.button("Submit Assignment", key="as4_submit_button"):
             try:
-                # save uploads to a temp folder
+                # basic file checks
+                if not uploaded_thresholded_image:
+                    st.error("Please upload a thresholded image file.")
+                    return
+                if not uploaded_outlined_image:
+                    st.error("Please upload an image with rectangles outlined.")
+                    return
+
+                # save uploads
                 temp_dir = "temp_uploads"
                 os.makedirs(temp_dir, exist_ok=True)
-                html_path  = os.path.join(temp_dir, "uploaded_map.html")
-                excel_path = os.path.join(temp_dir, "uploaded_sheet.xlsx")
-                for path, file in [(html_path, uploaded_html), (excel_path, uploaded_excel)]:
-                    with open(path, "wb") as f:
-                        f.write(file.getvalue())
+                th_path = os.path.join(temp_dir, "as4_thresholded.png")
+                ol_path = os.path.join(temp_dir, "as4_outlined.png")
+                with open(th_path, "wb") as f:
+                    f.write(uploaded_thresholded_image.getvalue())
+                with open(ol_path, "wb") as f:
+                    f.write(uploaded_outlined_image.getvalue())
 
-                # grade
-                total_grade, breakdown = grade_assignment(code_input, html_path, excel_path)
+                # Rectangle-coordinate grading (logic unchanged)
+                import collections
+                correct_vals = [
+                    974, 768, 1190, 890, 270, 768, 486, 889, 37, 768, 253, 890,
+                    1207, 768, 1423, 890, 740, 768, 955, 890, 505, 768, 720, 890,
+                    92, 618, 234, 660, 206, 511, 349, 554, 367, 438, 509, 480,
+                    523, 380, 665, 422, 629, 289, 772, 332, 788, 212, 930, 254,
+                    37, 136, 471, 298, 1238, 98, 1380, 141
+                ]
+                student_vals = []
+                for line in rectangle_coordinates.splitlines():
+                    student_vals += list(map(int, re.findall(r"\d+", line)))
+                rec_grade = sum(
+                    min(collections.Counter(correct_vals)[v], collections.Counter(student_vals)[v])
+                    for v in set(correct_vals)
+                )
+
+                # Simple image-existence grades
+                th_grade = 5 if uploaded_thresholded_image else 0
+                ol_grade = 5 if uploaded_outlined_image else 0
+
+                # Call existing grader
+                total_grade, breakdown = grade_assignment(code_input, rec_grade, th_grade, ol_grade)
+
                 if total_grade < 70:
                     st.error(f"You got {total_grade}/100. Please try again.")
                     return
 
-                # record grade in MySQL
+                # store grade in MySQL
                 conn = _get_conn()
                 cur  = conn.cursor()
                 cur.execute(
-                    "UPDATE records SET as3 = %s WHERE username = %s",
-                    (total_grade, st.session_state["username_as3"]),
+                    "UPDATE records SET as4 = %s WHERE username = %s",
+                    (total_grade, st.session_state["username_as4"]),
                 )
                 conn.commit()
                 updated = cur.rowcount
