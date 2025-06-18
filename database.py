@@ -13,23 +13,37 @@ import mysql.connector
 from mysql.connector import errorcode
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Connection helper – one persistent connection per Streamlit session
+# Robust connection helper: persistent and auto-reconnect
 # ─────────────────────────────────────────────────────────────────────────────
 
-@st.cache_resource(show_spinner=False)
 def _get_conn():
-    """Create (and cache) one MySQL connection per session using [mysql] from .streamlit/secrets.toml."""
+    """Get (and persist) a working MySQL connection in session_state."""
     cfg = st.secrets["mysql"]
-    conn = mysql.connector.connect(
-        host      = cfg["host"],
-        port      = int(cfg.get("port", 3306)),
-        user      = cfg["user"],
-        password  = cfg["password"],
-        database  = cfg["database"],
-        autocommit=False,
-        use_pure  = True,
-    )
-    return conn
+    key = "_mysql_conn"
+    if key not in st.session_state or not _is_conn_alive(st.session_state[key]):
+        try:
+            st.session_state[key] = mysql.connector.connect(
+                host      = cfg["host"],
+                port      = int(cfg.get("port", 3306)),
+                user      = cfg["user"],
+                password  = cfg["password"],
+                database  = cfg["database"],
+                autocommit=False,
+                use_pure  = True,
+                connection_timeout=10,
+            )
+        except Exception as e:
+            st.error(f"DB connect error: {e}")
+            raise
+    return st.session_state[key]
+
+def _is_conn_alive(conn):
+    """Returns True if connection is open and healthy."""
+    try:
+        conn.ping(reconnect=True, attempts=1, delay=0)
+        return True
+    except Exception:
+        return False
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Schema bootstrap (idempotent)
@@ -95,7 +109,6 @@ def create_tables() -> None:
     ]
     conn = _get_conn()
     cur  = conn.cursor()
-
     for stmt in ddl:
         try:
             cur.execute(stmt)
@@ -104,7 +117,6 @@ def create_tables() -> None:
         except mysql.connector.Error as e:
             if e.errno not in (errorcode.ER_TRG_ALREADY_EXISTS,):
                 st.error(f"DDL error: {e.msg}")
-
     conn.commit()
     cur.close()
 
