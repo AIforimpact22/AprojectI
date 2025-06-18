@@ -6,7 +6,7 @@ import mysql.connector
 from mysql.connector import errorcode
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Optional GitHub-push stub (keeps old code paths alive even after removal)
+# Optional GitHub-push stub (keeps old code alive even after removal)
 # ──────────────────────────────────────────────────────────────────────────────
 try:
     from github_sync import push_db_to_github        # noqa: F401
@@ -57,21 +57,94 @@ def show():
             st.error(f"Error verifying username: {e}")
             st.session_state["verified"] = False
 
-    # ────────────────── STEP 2 – assignment details (unchanged) ──────────────────
-    if st.session_state.get("verified"):
+    # ────────────────── STEP 2 – assignment & grading details ──────────────────
+    if st.session_state.get("verified", False):
+        # Step 2: Assignment and Grading Details
         st.markdown(
             '<h1 style="color:#ADD8E6;">Step 2: Review Assignment Details</h1>',
             unsafe_allow_html=True,
         )
         tab1, tab2 = st.tabs(["Assignment Details", "Grading Details"])
+
         with tab1:
-            st.markdown("*(assignment text unchanged)*")
+            st.markdown("""
+            ### Objective
+            In this assignment, you will write a Python script that fetches real-time earthquake data from the USGS Earthquake API, processes the data to filter earthquakes with a magnitude greater than 4.0, and plots the earthquake locations on a map. Additionally, you will calculate the number of earthquakes in different magnitude ranges and present the results visually.
+            """)
             with st.expander("See More"):
-                st.markdown("*(full task description unchanged)*")
+                st.markdown("""
+                <span style="color:#FFD700;"><strong>Task Requirements</strong></span>
+                - <span style="color:#FFD700;"><strong>Fetch Earthquake Data:</strong></span>
+                    - Use the USGS Earthquake API to fetch data for the date range **January 2nd, 2025, to January 9th, 2025**.
+                    - The API URL is:  
+                      https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=YYYY-MM-DD&endtime=YYYY-MM-DD  
+                      Replace YYYY-MM-DD with the appropriate dates.
+                - <span style="color:#FFD700;"><strong>Filter Data:</strong></span>
+                    - Filter the data to include only earthquakes with a magnitude greater than 4.0.
+                - <span style="color:#FFD700;"><strong>Map Visualization:</strong></span>
+                    - Create an interactive map using folium to show the locations of the filtered earthquakes.
+                    - Mark the earthquake locations with markers, using different colors based on their magnitude:
+                        - <span style="color:#FFD700;"><strong>Green</strong></span> for magnitude 4.0–5.0  
+                        - <span style="color:#FFD700;"><strong>Yellow</strong></span> for magnitude 5.0–5.5  
+                        - <span style="color:#FFD700;"><strong>Red</strong></span> for magnitude 5.5+  
+                    - Add popups to display additional information about each earthquake (magnitude, location, and time).
+                - <span style="color:#FFD700;"><strong>Bar Chart:</strong></span>
+                    - Create a bar chart using matplotlib or seaborn to visualize earthquake frequency by magnitude, within the following ranges:
+                        - 4.0–4.5  
+                        - 4.5–5.0  
+                        - 5.0+
+                - <span style="color:#FFD700;"><strong>Text Summary:</strong></span>
+                    - Generate a CSV file containing:
+                        - Total number of earthquakes with magnitude > 4.0.
+                        - Average, maximum, and minimum magnitudes (rounded to 2 decimal places).
+                        - Number of earthquakes in each magnitude range (4.0–4.5, 4.5–5.0, 5.0+).
+                <span style="color:#FFD700;"><strong>Python Libraries You Will Use</strong></span>
+                - folium for the map.  
+                - matplotlib or seaborn for the bar chart.  
+                - requests or urllib for API calls.  
+                - pandas for data processing.  
+                <span style="color:#FFD700;"><strong>Expected Output</strong></span>
+                1. A map showing earthquake locations.  
+                2. A bar chart showing earthquake frequency by magnitude.  
+                3. A text summary in CSV format.
+                """, unsafe_allow_html=True)
+
         with tab2:
-            st.markdown("*(grading rubric unchanged)*")
+            st.markdown("""
+            ### Detailed Grading Breakdown
+            """)
+            st.markdown("""
+            <span style="color:#FFD700;"><strong>1. Library Imports (10 Points)</strong></span>
+            - Checks if the required libraries (folium, matplotlib, requests, pandas) are imported.
+            """, unsafe_allow_html=True)
             with st.expander("See More"):
-                st.markdown("*(full rubric unchanged)*")
+                st.markdown("""
+                <span style="color:#FFD700;"><strong>2. Code Quality (20 Points)</strong></span>
+                - **Variable Naming (5 Points)**: Deducted if non-descriptive variable names are used (e.g., x, y).  
+                - **Spacing (5 Points)**: Deducted if improper spacing is found (e.g., no space after =, >, <).  
+                - **Comments (5 Points)**: Deducted if no comments are present to explain major steps.  
+                - **Code Organization (5 Points)**: Deducted if code blocks are not logically separated with blank lines.  
+                <span style="color:#FFD700;"><strong>3. Fetching Data from the API (10 Points)</strong></span>
+                - **Correct API URL (5 Points)**: Deducted if the URL is incorrect or the date range is invalid.  
+                - **Successful Data Retrieval (5 Points)**: Deducted if the data is not fetched successfully or error handling is missing.  
+                <span style="color:#FFD700;"><strong>4. Filtering Earthquakes (10 Points)</strong></span>
+                - **Correct Filtering (5 Points)**: Deducted if earthquakes with magnitude ≤ 4.0 are included.  
+                - **Data Extraction (5 Points)**: Deducted if relevant data (latitude, longitude, magnitude, time) is not extracted.  
+                <span style="color:#FFD700;"><strong>5. Map Visualization (20 Points)</strong></span>
+                - **Map Generation (5 Points)**: Deducted if the map is not generated or displayed.  
+                - **Color-Coded Markers (9 Points)**: Deducted if markers are not color-coded based on magnitude.  
+                - **Popups (6 Points)**: Deducted if popups do not display magnitude, location, and time.  
+                <span style="color:#FFD700;"><strong>6. Bar Chart (15 Points)</strong></span>
+                - **Chart Generation (5 Points)**: Deducted if the bar chart is not generated or displayed.  
+                - **Magnitude Ranges (5 Points)**: Deducted if the magnitude ranges are incorrect.  
+                - **Labeling (5 Points)**: Deducted if the chart is not properly labeled.  
+                <span style="color:#FFD700;"><strong>7. Text Summary (15 Points)</strong></span>
+                - **Total Earthquakes (3 Points)**: Deducted if the total number is incorrect.  
+                - **Average Magnitude (3 Points)**: Deducted if not rounded to 2 decimal places.  
+                - **Maximum Magnitude (3 Points)**: Deducted if not rounded to 2 decimal places.  
+                - **Minimum Magnitude (3 Points)**: Deducted if not rounded to 2 decimal places.  
+                - **Magnitude Ranges (3 Points)**: Deducted if the counts per range are incorrect.  
+                """, unsafe_allow_html=True)
 
         # ────────────────── STEP 3 – code entry ──────────────────
         st.markdown(
