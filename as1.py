@@ -13,7 +13,7 @@ from mysql.connector import errorcode
 # --------------------------------------------------------------------------- #
 # Cached connection (avoids reconnect on every rerun)
 # --------------------------------------------------------------------------- #
-@st.cache(allow_output_mutation=True)
+@st.cache_resource
 def get_cached_conn():
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
@@ -28,7 +28,7 @@ def get_cached_conn():
 # --------------------------------------------------------------------------- #
 # Cache username‐exists check
 # --------------------------------------------------------------------------- #
-@st.cache(allow_output_mutation=True, show_spinner=False)
+@st.cache_data(show_spinner=False)
 def user_exists(username: str) -> bool:
     conn = get_cached_conn()
     cur = conn.cursor()
@@ -40,7 +40,7 @@ def user_exists(username: str) -> bool:
 # --------------------------------------------------------------------------- #
 # Cache exec+capture logic so reruns with the same code string are fast
 # --------------------------------------------------------------------------- #
-@st.cache(allow_output_mutation=True, show_spinner=False)
+@st.cache_data(show_spinner=False)
 def run_and_capture(code_str: str):
     captured = StringIO()
     import sys
