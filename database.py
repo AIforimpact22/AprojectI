@@ -8,22 +8,22 @@ def _get_conn():
     """Return a fresh MySQL connection from Streamlit secrets."""
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
-        host       = cfg["host"],
-        port       = int(cfg.get("port", 3306)),
-        user       = cfg["user"],
-        password   = cfg["password"],
-        database   = cfg["database"],
-        autocommit = False,
+        host        = cfg["host"],
+        port        = int(cfg.get("port", 3306)),
+        user        = cfg["user"],
+        password    = cfg["password"],
+        database    = cfg["database"],
+        autocommit  = False,
         connection_timeout = 10,
     )
 
 def create_tables():
     """
-    Ensure all required tables exist. Opens a fresh connection for each CREATE
-    statement to avoid stale‐socket ping errors.
+    Ensure all required tables exist.
+    Opens a fresh connection for each CREATE to avoid stale-socket issues.
     """
     ddl_statements = [
-        # USERS table: use DATETIME DEFAULT CURRENT_TIMESTAMP
+        # USERS table – use TIMESTAMP for CURRENT_TIMESTAMP default
         """
         CREATE TABLE IF NOT EXISTS users (
             fullname VARCHAR(100),
@@ -31,11 +31,10 @@ def create_tables():
             phone BIGINT,
             username VARCHAR(50) PRIMARY KEY,
             password VARCHAR(100),
-            date_of_joining DATETIME DEFAULT CURRENT_TIMESTAMP,
+            date_of_joining TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             approved TINYINT DEFAULT 0
         )
         """,
-
         # RECORDS table
         """
         CREATE TABLE IF NOT EXISTS records (
@@ -45,9 +44,8 @@ def create_tables():
             as3 INT DEFAULT NULL,
             as4 INT DEFAULT NULL
         )
-        """,
-
-        # … add any additional CREATE TABLE statements here …
+        """
+        # … any additional CREATE TABLE statements here, each as its own string …
     ]
 
     for stmt in ddl_statements:
@@ -59,7 +57,7 @@ def create_tables():
             cur.execute(stmt)
             conn.commit()
         except mysql.connector.Error as e:
-            # Ignore "table already exists" errors; warn on others
+            # Ignore “table already exists” errors; warn on others
             if e.errno not in (errorcode.ER_TABLE_EXISTS_ERROR,):
                 st.warning(f"Error creating table: {e.msg}")
         finally:
