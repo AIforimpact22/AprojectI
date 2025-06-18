@@ -61,30 +61,82 @@ def show():
             st.session_state["verified_as4"] = False
 
     # ─────────────────────────────────────────────
-    # Subsequent steps (UI text unchanged)
+    # Step 2: Review Assignment Details
     # ─────────────────────────────────────────────
-    if st.session_state.get("verified_as4"):
-        # … (all assignment / grading UI text left exactly as before) …
+    if st.session_state.get("verified_as4", False):
+        st.markdown("<h2 style='color:#ADD8E6;'>Step 2: Review Assignment Details</h2>", unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["Assignment Details", "Grading Details"])
+        
         with tab1:
-            st.markdown("*(assignment description unchanged)*")
+            st.markdown("""
+            ### Objective:
+            In this assignment, you will use Python image processing libraries to analyze a black-and-white image, detect rectangular shapes, and determine the coordinates of each rectangle.
+            """)
         with st.expander("See More"):
-            st.markdown("*(full instructions unchanged)*")
-            st.image("correct_files/BW.jpg")
-        with tab2:
-            st.markdown("*(grading rubric unchanged)*")
+            st.markdown("""
+                #### Instructions:
+                1. **Set Up Your Environment:**
+                   - Open a new Google Colab notebook.
+                   - Import the necessary libraries:
+                     - `cv2` (OpenCV) for image processing
+                     - `numpy` for numerical operations
+                     - `matplotlib` for displaying images
 
-        # Submission widgets (same keys)
+                2. **Load the Image:**
+                   - Download the provided image and upload it to Google Colab.
+                   - Load the image using OpenCV.
+
+                3. **Convert the Image to Grayscale and Apply Thresholding:**
+                   - Convert the image to grayscale.
+                   - Use binary thresholding to make it easier to detect the rectangular shapes. This will turn the rectangles into clear white shapes against a black background.
+
+                4. **Detect Contours:**
+                   - Use OpenCV’s `findContours` function to detect all contours in the image.
+                   - Filter out contours that are not rectangular shapes.
+
+                5. **Filter and Identify Rectangles:**
+                   - For each contour, approximate its shape using `cv2.approxPolyDP`.
+                   - If the contour has four points, consider it a rectangle.
+                   - Calculate the bounding box coordinates of each rectangle using `cv2.boundingRect`.
+
+                6. **Extract and Print the Coordinates:**
+                   - For each detected rectangle, print the top-left and bottom-right coordinates.
+                   - Display the original image with the rectangles outlined for verification.
+                """)
+            st.image("correct_files/BW.jpg")
+                            
+        with tab2:
+            st.markdown("""
+            ### Detailed Grading Breakdown:
+            1. **Library Imports (20 Points)**
+            2. **Code Quality (14 Points)**
+            3. **Rectangle Coordinates (56 Points)**
+            4. **Thresholded Image (5 Points)**
+            5. **Image with Rectangles Outlined (5 Points)
+            """)
+
+        # ─────────────────────────────────────────────
+        # Step 3: Submit Your Assignment
+        # ─────────────────────────────────────────────
         st.markdown("<h2 style='color:#ADD8E6;'>Step 3: Submit Your Assignment</h2>", unsafe_allow_html=True)
         st.markdown("<p style='color:white;font-weight:bold;'>📝 Paste Your Code Here</p>", unsafe_allow_html=True)
         code_input = st.text_area("", height=300, key="as4_code_input")
 
+        # ─────────────────────────────────────────────
+        # Step 4: Enter Rectangle Coordinates
+        # ─────────────────────────────────────────────
         st.markdown("<h2 style='color:#ADD8E6;'>Step 4: Enter Rectangle Coordinates</h2>", unsafe_allow_html=True)
         rectangle_coordinates = st.text_area("", height=150, key="as4_rectangle_coordinates")
 
+        # ─────────────────────────────────────────────
+        # Step 5: Upload Your Thresholded Image
+        # ─────────────────────────────────────────────
         st.markdown("<h2 style='color:#ADD8E6;'>Step 5: Upload Your Thresholded Image</h2>", unsafe_allow_html=True)
         uploaded_thresholded_image = st.file_uploader("", type=["png", "jpg", "jpeg"], key="as4_thresholded_image")
 
+        # ─────────────────────────────────────────────
+        # Step 6: Upload Image with Rectangles Outlined
+        # ─────────────────────────────────────────────
         st.markdown("<h2 style='color:#ADD8E6;'>Step 6: Upload Image with Rectangles Outlined</h2>", unsafe_allow_html=True)
         uploaded_outlined_image = st.file_uploader("", type=["png", "jpg", "jpeg"], key="as4_outlined_image")
 
