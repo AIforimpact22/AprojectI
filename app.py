@@ -38,72 +38,52 @@ def main():
     apply_dark_theme()
     create_tables()
 
-    # ────────────── Always render Home+Sidebar when page == "home" ──────────────
-    if st.session_state.get("page") == "home":
-        show_sidebar()
-        show_home()
-        show_footer()
-        return
-
-    # ────────────── Initialize default page ──────────────
     if "page" not in st.session_state:
         st.session_state["page"] = "offer"
 
-    page      = st.session_state["page"]
-    logged_in = st.session_state.get("logged_in", False)
-
-    if logged_in:
-        # ────────────── Logged-in flow ──────────────
+    if st.session_state.get("logged_in", False):
         show_sidebar()
-        if page == "logout":
+        selected = st.session_state.get("page", "home")
+
+        if selected == "logout":
             st.session_state["logged_in"] = False
-            st.session_state["page"]      = "offer"
+            st.session_state["page"] = "offer"
             safe_rerun()
-            return
-
-        if page == "home":
-            # (we already handled this at top, but safe to keep)
+        elif selected == "home":
             show_home()
-
         else:
-            if not enforce_week_gating(page):
+            if not enforce_week_gating(selected):
                 st.warning("You must complete the previous week before accessing this section.")
                 st.stop()
             try:
-                module = import_module(page)
+                # Only try to import directly from selected module name
+                module = import_module(selected)
                 if hasattr(module, "show"):
                     module.show()
                 else:
                     st.warning("The selected module does not have a 'show()' function.")
             except ImportError as e:
                 st.warning("Unknown selection: " + str(e))
-
     else:
-        # ────────────── Not-logged-in flow ──────────────
-        if page == "offer":
+        if st.session_state["page"] == "offer":
             import offer
             offer.show()
-
-        elif page == "login":
+        elif st.session_state["page"] == "login":
             import login
             login.show_login_create_account()
-
-        elif page == "loginx":
+        elif st.session_state["page"] == "loginx":
             st.warning("Course 2 Login is not available yet.")
             if st.button("Go Back"):
                 st.session_state["page"] = "offer"
                 safe_rerun()
-
-        elif page == "course2_app":
+        elif st.session_state["page"] == "course2_app":
             from second.appx import appx
             appx.show()
-
         else:
-            # Any other page (including home, but that was handled early)
             import login
             login.show_login_create_account()
 
     show_footer()
 
 if __name__ == "__main__":
-    main()
+    main()                    
