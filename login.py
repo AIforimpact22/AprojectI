@@ -11,8 +11,9 @@ from theme import apply_dark_theme
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# DB helper                                                                    │
+# Singleton cached DB helper – avoids reconnect on every call
 # ──────────────────────────────────────────────────────────────────────────────
+@st.experimental_singleton
 def _get_conn():
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
