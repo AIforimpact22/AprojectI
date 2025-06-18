@@ -6,6 +6,8 @@ from home import show_home
 from style import show_footer
 from importlib import import_module
 from github_progress import get_user_progress
+import mysql.connector
+from mysql.connector import errorcode
 import sys
 import os
 
@@ -38,22 +40,23 @@ def main():
     apply_dark_theme()
     create_tables()
 
-    # Ensure we always have a page set
+    # ────────────────────────────────
+    # Add the 'updates' folder to sys.path
+    # ────────────────────────────────
+    updates_path = os.path.abspath("updates")
+    if os.path.isdir(updates_path) and updates_path not in sys.path:
+        sys.path.append(updates_path)
+
+    # ensure default page
     if "page" not in st.session_state:
         st.session_state["page"] = "offer"
-
-    # ----------------------------------------------------------------------------
-    # 1) Show the sidebar on every page
-    # ----------------------------------------------------------------------------
-    show_sidebar()
 
     page      = st.session_state["page"]
     logged_in = st.session_state.get("logged_in", False)
 
-    # ----------------------------------------------------------------------------
-    # 2) Logged‐in user flow
-    # ----------------------------------------------------------------------------
     if logged_in:
+        # ─────────────────── Logged-in flow ───────────────────
+        show_sidebar()
         if page == "logout":
             st.session_state["logged_in"] = False
             st.session_state["page"]      = "offer"
@@ -63,14 +66,15 @@ def main():
         if page == "home":
             show_home()
         else:
-            # enforce module gating
             if page.startswith("modules_week") and not enforce_week_gating(page):
                 st.warning("You must complete the previous week before accessing this section.")
                 st.stop()
-
-            # try to dynamically import & run the module
             try:
-                module = import_module(page)
+                # try import from root, then from updates
+                try:
+                    module = import_module(page)
+                except ImportError:
+                    module = import_module(f"updates.{page}")
                 if hasattr(module, "show"):
                     module.show()
                 else:
@@ -78,10 +82,8 @@ def main():
             except ImportError as e:
                 st.warning("Unknown selection: " + str(e))
 
-    # ----------------------------------------------------------------------------
-    # 3) Not‐logged‐in user flow
-    # ----------------------------------------------------------------------------
     else:
+        # ──────────────── Not-logged-in flow ────────────────
         if page == "offer":
             import offer
             offer.show()
@@ -101,13 +103,10 @@ def main():
             appx.show()
 
         else:
-            # fallback to login if unknown
+            # fallback to login
             import login
             login.show_login_create_account()
 
-    # ----------------------------------------------------------------------------
-    # 4) Footer is always shown last
-    # ----------------------------------------------------------------------------
     show_footer()
 
 if __name__ == "__main__":
