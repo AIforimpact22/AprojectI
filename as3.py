@@ -73,20 +73,88 @@ def show():
             st.session_state["verified_as3"] = False
 
     # ─────────────────────────────────────────────
-    # Step 2 – assignment & grading details (UI unchanged)
+    # Step 2 – Review Assignment Details
     # ─────────────────────────────────────────────
-    if st.session_state.get("verified_as3"):
+    if st.session_state.get("verified_as3", False):
         st.markdown(
             '<h1 style="color:#ADD8E6;">Step 2: Review Assignment Details</h1>',
             unsafe_allow_html=True,
         )
         tab1, tab2 = st.tabs(["Assignment Details", "Grading Details"])
+        
         with tab1:
-            st.markdown("*(assignment description unchanged)*")
+            st.markdown("""
+            <span style="color:#FFD700;"><strong>### Objective:</strong></span>
+            In this assignment, students will work with geographical temperature data and apply Python programming to perform data manipulation and visualization. The task is broken into three stages, with each stage encapsulating a specific function. By the end of the assignment, students will merge the functions into one script to complete the task efficiently.
+            """, unsafe_allow_html=True)
         with st.expander("See More"):
-            st.markdown("*(full text unchanged)*")
+            st.markdown("""
+            <span style="color:#FFD700;"><strong>### Stage 1: Filtering Data Below 25°C</strong></span>
+            **Goal:** Create a new tab in the spreadsheet containing only the data points where the temperature is below 25°C.
+
+            **Instructions:**
+            - Load the provided Excel file containing longitude, latitude, and temperature data.
+            - Write a Python script that filters out all the rows where the temperature is below 25°C.
+            - Save this filtered data in a new sheet within the same Excel file, naming the new sheet "Below_25".
+
+            **Deliverable:** A script that filters and saves the data in the "Below_25" tab of the Excel file.
+
+            **File:** [Temperature Data](https://docs.google.com/spreadsheets/d/1EA4iram3ngYgTIuoKHCciKj1KBxpUqG1CwkyW71wUYU/edit?gid=1798066675#gid=1798066675)
+
+            <span style="color:#FFD700;"><strong>### Stage 2: Filtering Data Above 25°C</strong></span>
+            **Goal:** Create another tab in the spreadsheet containing only the data points where the temperature is above 25°C.
+
+            **Instructions:**
+            - Extend your script to filter out all the rows where the temperature is above 25°C.
+            - Save this filtered data in a new sheet named "Above_25".
+
+            **Deliverable:** A script that adds the "Above_25" tab to the Excel file.
+
+            <span style="color:#FFD700;"><strong>### Stage 3: Visualizing Data on a Map</strong></span>
+            **Goal:** Visualize the data points from both the "Below_25" and "Above_25" tabs on a geographical map.
+
+            **Instructions:**
+            - Using a Python mapping library (such as folium, matplotlib, or plotly), plot the data points from both the "Below_25" and "Above_25" tabs.
+            - Use blue to represent the data points from the "Below_25" tab and red for the "Above_25" tab.
+            - Ensure the map accurately displays the temperature data at the correct coordinates.
+
+            **Deliverable:** A Python script that generates a map displaying the data points in blue and red.
+
+            <span style="color:#FFD700;"><strong>### Final Task: Merging the Scripts</strong></span>
+            **Goal:** Combine all three stages into one cohesive Python script that performs the filtering and visualization tasks in sequence.
+
+            **Instructions:**
+            - Encapsulate the functionality of the three scripts (Stage 1, Stage 2, and Stage 3) into distinct functions.
+            - Write a master function that calls these functions in sequence:
+                1. Filter the data below 25°C and save it to a new tab.
+                2. Filter the data above 25°C and save it to another tab.
+                3. Visualize both sets of data on a map.
+            - Ensure that the final script runs all the steps seamlessly.
+
+            **Deliverable:** A Python script that completes the entire task, from filtering the data to visualizing it on a map.
+            """, unsafe_allow_html=True)
+        
         with tab2:
-            st.markdown("*(grading rubric unchanged)*")
+            st.markdown("""
+            <span style="color:#FFD700;"><strong>### Detailed Grading Breakdown:</strong></span>
+            """, unsafe_allow_html=True)
+            st.markdown("""
+            <span style="color:#FFD700;"><strong>1. Code Grading (40 Points Total)</strong></span>
+            - **Library Imports (15 Points)**  
+            - **Code Quality (10 Points)**  
+            - **Sheet Creation (15 Points)**  
+                - Should create "Below_25" tab.  
+                - Should create "Above_25" tab.  
+
+            <span style="color:#FFD700;"><strong>2. HTML File Grading (20 Points Total)</strong></span>  
+
+            <span style="color:#FFD700;"><strong>3. Excel File Grading (40 Points Total)</strong></span>
+            - **Correct Sheets (15 Points):**  
+              - The Excel file should have three sheets: "Sheet1", "Above_25", and "Below_25".  
+            - **Correct Columns (15 Points):**  
+              - Must include ("longitude", "latitude", "temperature").  
+            - **Row Count for "Above_25" (10 Points)**  
+            """, unsafe_allow_html=True)
 
         # ─────────────────────────────────────────
         # Step 3 – code input
