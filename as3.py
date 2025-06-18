@@ -1,4 +1,5 @@
 # as3.py  – MySQL edition (no local .db file)
+
 import streamlit as st
 import os
 from grades.grade3 import grade_assignment
@@ -6,35 +7,24 @@ import mysql.connector
 from mysql.connector import errorcode
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Optional GitHub-push stub (keeps old call sites alive after file removal)
+# Cached connection helper
 # ──────────────────────────────────────────────────────────────────────────────
-try:
-    from github_sync import push_db_to_github        # noqa: F401
-except ModuleNotFoundError:
-    def push_db_to_github(*_args, **_kwargs):        # noqa: D401
-        """No-op – data is already in MySQL."""
-        return {"success": True}
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Singleton cached MySQL connection helper
-# ──────────────────────────────────────────────────────────────────────────────
-@st.experimental_singleton
+@st.cache(allow_output_mutation=True)
 def _get_conn():
-    """Return a persistent MySQL connection from Streamlit secrets."""
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
-        host       = cfg["host"],
-        port       = int(cfg.get("port", 3306)),
-        user       = cfg["user"],
-        password   = cfg["password"],
-        database   = cfg["database"],
-        autocommit = False,
+        host=cfg["host"],
+        port=int(cfg.get("port", 3306)),
+        user=cfg["user"],
+        password=cfg["password"],
+        database=cfg["database"],
+        autocommit=False,
     )
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Cache username verification to avoid repeat queries
+# Cache username verification
 # ──────────────────────────────────────────────────────────────────────────────
-@st.cache_data(show_spinner=False)
+@st.cache(allow_output_mutation=True, show_spinner=False)
 def username_exists(username: str) -> bool:
     conn = _get_conn()
     cur  = conn.cursor()
@@ -42,6 +32,15 @@ def username_exists(username: str) -> bool:
     exists = cur.fetchone() is not None
     cur.close()
     return exists
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Optional GitHub-push stub (keeps old call sites alive without breaking)
+# ──────────────────────────────────────────────────────────────────────────────
+try:
+    from github_sync import push_db_to_github  # noqa: F401
+except ModuleNotFoundError:
+    def push_db_to_github(*_args, **_kwargs):  # noqa: D401
+        return {"success": True}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # MAIN UI
@@ -179,8 +178,8 @@ def show():
             '<h1 style="color:#ADD8E6;">Step 4: Upload Your HTML and Excel Files</h1>',
             unsafe_allow_html=True,
         )
-        uploaded_html  = st.file_uploader("Upload your HTML file (Map)",   type=["html"], key="as3_uploaded_html")
-        uploaded_excel = st.file_uploader("Upload your Excel file",        type=["xlsx"], key="as3_uploaded_excel")
+        uploaded_html  = st.file_uploader("Upload your HTML file (Map)", type=["html"], key="as3_uploaded_html")
+        uploaded_excel = st.file_uploader("Upload your Excel file", type=["xlsx"], key="as3_uploaded_excel")
         all_uploaded = all([uploaded_html, uploaded_excel])
         st.write("All files uploaded:", "✅ Yes" if all_uploaded else "❌ No")
 
@@ -228,6 +227,5 @@ def show():
     else:
         st.warning("Please verify your username first.")
 
-# ──────────────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     show()
