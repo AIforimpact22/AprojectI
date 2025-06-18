@@ -38,28 +38,43 @@ def main():
     apply_dark_theme()
     create_tables()
 
+    # initialize default page
     if "page" not in st.session_state:
         st.session_state["page"] = "offer"
 
-    if st.session_state.get("logged_in", False):
-        # Logged-in users always see the sidebar
+    page      = st.session_state["page"]
+    logged_in = st.session_state.get("logged_in", False)
+
+    # Show sidebar whenever we're on Home or already logged in
+    if logged_in or page == "home":
         show_sidebar()
-        selected = st.session_state.get("page", "home")
 
-        if selected == "logout":
+        # handle logout immediately
+        if page == "logout":
             st.session_state["logged_in"] = False
-            st.session_state["page"] = "offer"
+            st.session_state["page"]      = "offer"
             safe_rerun()
+            return
 
-        elif selected == "home":
+        # route
+        if page == "home":
             show_home()
-
         else:
-            if not enforce_week_gating(selected):
-                st.warning("You must complete the previous week before accessing this section.")
-                st.stop()
+            # for everything except home/logout we must be logged in
+            if not logged_in:
+                # this can only happen if page=="home" was false,
+                # but we already caught home above, so should never land here
+                st.warning("Please log in to access this page.")
+                return
+
+            # enforce gating for modules
+            if page.startswith("modules_week"):
+                if not enforce_week_gating(page):
+                    st.warning("You must complete the previous week before accessing this section.")
+                    st.stop()
+
             try:
-                module = import_module(selected)
+                module = import_module(page)
                 if hasattr(module, "show"):
                     module.show()
                 else:
@@ -68,8 +83,7 @@ def main():
                 st.warning("Unknown selection: " + str(e))
 
     else:
-        # Not-logged-in flow
-        page = st.session_state["page"]
+        # Not logged_in and not on Home
         if page == "offer":
             import offer
             offer.show()
@@ -88,12 +102,8 @@ def main():
             from second.appx import appx
             appx.show()
 
-        elif page == "home":
-            # Even before logging in, allow viewing Home with sidebar
-            show_sidebar()
-            show_home()
-
         else:
+            # fallback to login
             import login
             login.show_login_create_account()
 
