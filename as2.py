@@ -1,4 +1,5 @@
 # as2.py  – MySQL edition (no local .db file)
+
 import streamlit as st
 import os
 from grades.grade2 import grade_assignment
@@ -15,19 +16,35 @@ except ModuleNotFoundError:
         """No-op – all data now lives in MySQL."""
         return {"success": True}
 
+
 # ──────────────────────────────────────────────────────────────────────────────
-# MySQL connection helper
+# Cached MySQL connection helper
 # ──────────────────────────────────────────────────────────────────────────────
+@st.experimental_singleton
 def _get_conn():
+    """Return a persistent MySQL connection from Streamlit secrets."""
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
-        host     = cfg["host"],
-        port     = int(cfg.get("port", 3306)),
-        user     = cfg["user"],
-        password = cfg["password"],
-        database = cfg["database"],
+        host       = cfg["host"],
+        port       = int(cfg.get("port", 3306)),
+        user       = cfg["user"],
+        password   = cfg["password"],
+        database   = cfg["database"],
         autocommit = False,
     )
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Cache username verification to avoid repeat queries
+# ──────────────────────────────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False)
+def username_exists(username: str) -> bool:
+    conn = _get_conn()
+    cur  = conn.cursor()
+    cur.execute("SELECT 1 FROM records WHERE username = %s LIMIT 1", (username,))
+    exists = cur.fetchone() is not None
+    cur.close()
+    return exists
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # MAIN UI
@@ -42,19 +59,11 @@ def show():
     )
     username = st.text_input("Enter Your Username")
     if st.button("Verify Username") and username:
-        try:
-            conn = _get_conn()
-            cur  = conn.cursor()
-            cur.execute("SELECT 1 FROM records WHERE username = %s LIMIT 1", (username,))
-            if cur.fetchone():
-                st.success("Username verified. Proceed to the next steps.")
-                st.session_state["verified"] = True
-            else:
-                st.error("Username not found. Please enter a registered username.")
-                st.session_state["verified"] = False
-            conn.close()
-        except Exception as e:
-            st.error(f"Error verifying username: {e}")
+        if username_exists(username):
+            st.success("Username verified. Proceed to the next steps.")
+            st.session_state["verified"] = True
+        else:
+            st.error("Username not found. Please enter a registered username.")
             st.session_state["verified"] = False
 
     # ────────────────── STEP 2 – assignment & grading details ──────────────────
@@ -92,7 +101,7 @@ def show():
                     - Create a bar chart using matplotlib or seaborn to visualize earthquake frequency by magnitude, within the following ranges:
                         - 4.0–4.5  
                         - 4.5–5.0  
-                        - 5.0+
+                        - 5.0+  
                 - <span style="color:#FFD700;"><strong>Text Summary:</strong></span>
                     - Generate a CSV file containing:
                         - Total number of earthquakes with magnitude > 4.0.
