@@ -38,52 +38,77 @@ def main():
     apply_dark_theme()
     create_tables()
 
+    # Ensure we always have a page set
     if "page" not in st.session_state:
         st.session_state["page"] = "offer"
 
-    if st.session_state.get("logged_in", False):
-        show_sidebar()
-        selected = st.session_state.get("page", "home")
+    # ----------------------------------------------------------------------------
+    # 1) Show the sidebar on every page
+    # ----------------------------------------------------------------------------
+    show_sidebar()
 
-        if selected == "logout":
+    page      = st.session_state["page"]
+    logged_in = st.session_state.get("logged_in", False)
+
+    # ----------------------------------------------------------------------------
+    # 2) Logged‐in user flow
+    # ----------------------------------------------------------------------------
+    if logged_in:
+        if page == "logout":
             st.session_state["logged_in"] = False
-            st.session_state["page"] = "offer"
+            st.session_state["page"]      = "offer"
             safe_rerun()
-        elif selected == "home":
+            return
+
+        if page == "home":
             show_home()
         else:
-            if not enforce_week_gating(selected):
+            # enforce module gating
+            if page.startswith("modules_week") and not enforce_week_gating(page):
                 st.warning("You must complete the previous week before accessing this section.")
                 st.stop()
+
+            # try to dynamically import & run the module
             try:
-                # Only try to import directly from selected module name
-                module = import_module(selected)
+                module = import_module(page)
                 if hasattr(module, "show"):
                     module.show()
                 else:
                     st.warning("The selected module does not have a 'show()' function.")
             except ImportError as e:
                 st.warning("Unknown selection: " + str(e))
+
+    # ----------------------------------------------------------------------------
+    # 3) Not‐logged‐in user flow
+    # ----------------------------------------------------------------------------
     else:
-        if st.session_state["page"] == "offer":
+        if page == "offer":
             import offer
             offer.show()
-        elif st.session_state["page"] == "login":
+
+        elif page == "login":
             import login
             login.show_login_create_account()
-        elif st.session_state["page"] == "loginx":
+
+        elif page == "loginx":
             st.warning("Course 2 Login is not available yet.")
             if st.button("Go Back"):
                 st.session_state["page"] = "offer"
                 safe_rerun()
-        elif st.session_state["page"] == "course2_app":
+
+        elif page == "course2_app":
             from second.appx import appx
             appx.show()
+
         else:
+            # fallback to login if unknown
             import login
             login.show_login_create_account()
 
+    # ----------------------------------------------------------------------------
+    # 4) Footer is always shown last
+    # ----------------------------------------------------------------------------
     show_footer()
 
 if __name__ == "__main__":
-    main()                    
+    main()
