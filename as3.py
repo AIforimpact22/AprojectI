@@ -16,18 +16,32 @@ except ModuleNotFoundError:
         return {"success": True}
 
 # ──────────────────────────────────────────────────────────────────────────────
-# MySQL connection helper
+# Singleton cached MySQL connection helper
 # ──────────────────────────────────────────────────────────────────────────────
+@st.experimental_singleton
 def _get_conn():
+    """Return a persistent MySQL connection from Streamlit secrets."""
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
-        host     = cfg["host"],
-        port     = int(cfg.get("port", 3306)),
-        user     = cfg["user"],
-        password = cfg["password"],
-        database = cfg["database"],
+        host       = cfg["host"],
+        port       = int(cfg.get("port", 3306)),
+        user       = cfg["user"],
+        password   = cfg["password"],
+        database   = cfg["database"],
         autocommit = False,
     )
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Cache username verification to avoid repeat queries
+# ──────────────────────────────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False)
+def username_exists(username: str) -> bool:
+    conn = _get_conn()
+    cur  = conn.cursor()
+    cur.execute("SELECT 1 FROM records WHERE username = %s LIMIT 1", (username,))
+    exists = cur.fetchone() is not None
+    cur.close()
+    return exists
 
 # ──────────────────────────────────────────────────────────────────────────────
 # MAIN UI
@@ -55,16 +69,10 @@ def show():
     username = st.text_input("Enter Your Username", key="as3_username_input")
     if st.button("Verify Username", key="as3_verify_button") and username:
         try:
-            conn = _get_conn()
-            cur  = conn.cursor()
-            cur.execute("SELECT 1 FROM records WHERE username = %s LIMIT 1", (username,))
-            exists = cur.fetchone() is not None
-            conn.close()
-
-            if exists:
+            if username_exists(username):
                 st.success("Username verified. Proceed to the next steps.")
-                st.session_state["verified_as3"]  = True
-                st.session_state["username_as3"] = username
+                st.session_state["verified_as3"]   = True
+                st.session_state["username_as3"]   = username
             else:
                 st.error("Invalid username. Please enter a registered username.")
                 st.session_state["verified_as3"] = False
