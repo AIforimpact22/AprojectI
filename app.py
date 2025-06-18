@@ -33,32 +33,46 @@ def enforce_week_gating(selected):
     return True
 
 def main():
-    st.set_page_config(page_title="Code for Impact", layout="wide")
+    # ⚙️ Force sidebar expanded on load
+    st.set_page_config(
+        page_title="Code for Impact",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
     apply_dark_theme()
     create_tables()
 
-    # ensure a page is set
+    # — ensure a page is set
     if "page" not in st.session_state:
         st.session_state["page"] = "offer"
 
-    page     = st.session_state["page"]
+    page      = st.session_state["page"]
     logged_in = st.session_state.get("logged_in", False)
 
-    # ───────────────────────────── Always show sidebar ─────────────────────────────
+    # —───────────────────────────────────────────────────────────────────────────
+    # 1) Render sidebar unconditionally
+    # —───────────────────────────────────────────────────────────────────────────
     show_sidebar()
 
-    # ───────────────────────────── Handle logout ─────────────────────────────
+    # —───────────────────────────────────────────────────────────────────────────
+    # 2) Handle logout immediately
+    # —───────────────────────────────────────────────────────────────────────────
     if page == "logout":
         st.session_state["logged_in"] = False
         st.session_state["page"]      = "offer"
         safe_rerun()
         return
 
-    # ───────────────────────────── Home page ─────────────────────────────
+    # —───────────────────────────────────────────────────────────────────────────
+    # 3) Home page
+    # —───────────────────────────────────────────────────────────────────────────
     if page == "home":
         show_home()
 
-    # ───────────────────────────── Not logged in ─────────────────────────────
+    # —───────────────────────────────────────────────────────────────────────────
+    # 4) Not-logged-in flow
+    # —───────────────────────────────────────────────────────────────────────────
     elif not logged_in:
         if page == "offer":
             import offer
@@ -82,14 +96,15 @@ def main():
             import login
             login.show_login_create_account()
 
-    # ───────────────────────────── Logged in & modules ─────────────────────────────
+    # —───────────────────────────────────────────────────────────────────────────
+    # 5) Logged-in & modules flow
+    # —───────────────────────────────────────────────────────────────────────────
     else:
-        # enforce gating for module weeks
+        # module gating
         if page.startswith("modules_week") and not enforce_week_gating(page):
             st.warning("You must complete the previous week before accessing this section.")
             st.stop()
 
-        # dynamic import of module
         try:
             module = import_module(page)
             if hasattr(module, "show"):
@@ -99,8 +114,11 @@ def main():
         except ImportError as e:
             st.warning("Unknown selection: " + str(e))
 
-    # ───────────────────────────── Always show footer ─────────────────────────────
+    # —───────────────────────────────────────────────────────────────────────────
+    # 6) Footer
+    # —───────────────────────────────────────────────────────────────────────────
     show_footer()
+
 
 if __name__ == "__main__":
     main()
