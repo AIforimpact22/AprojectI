@@ -4,15 +4,17 @@ import streamlit as st
 import os
 from grades.grade3 import grade_assignment
 import mysql.connector
-from mysql.connector import errorcode
+from mysql.connector import pooling
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Cached connection helper
+# Initialize a MySQL connection pool once per session
 # ──────────────────────────────────────────────────────────────────────────────
 @st.cache_resource
-def _get_conn():
+def init_conn_pool():
     cfg = st.secrets["mysql"]
-    return mysql.connector.connect(
+    return pooling.MySQLConnectionPool(
+        pool_name="mypool_as3",
+        pool_size=5,
         host=cfg["host"],
         port=int(cfg.get("port", 3306)),
         user=cfg["user"],
@@ -21,25 +23,29 @@ def _get_conn():
         autocommit=False,
     )
 
+def get_conn():
+    return init_conn_pool().get_connection()
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Cache username verification
 # ──────────────────────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def username_exists(username: str) -> bool:
-    conn = _get_conn()
+    conn = get_conn()
     cur  = conn.cursor()
     cur.execute("SELECT 1 FROM records WHERE username = %s LIMIT 1", (username,))
     exists = cur.fetchone() is not None
     cur.close()
+    conn.close()
     return exists
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Optional GitHub-push stub (keeps old call sites alive without breaking)
+# Optional GitHub-push stub (no-op)
 # ──────────────────────────────────────────────────────────────────────────────
 try:
     from github_sync import push_db_to_github  # noqa: F401
 except ModuleNotFoundError:
-    def push_db_to_github(*_args, **_kwargs):  # noqa: D401
+    def push_db_to_github(*args, **kwargs):
         return {"success": True}
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -106,8 +112,8 @@ def show():
 
                 **Deliverable:** A script that filters and saves the data in the "Below_25" tab of the Excel file.
 
-                **File:** [Temperature Data](https://docs.google.com/spreadsheets/d/1EA4iram3ngYgTIuoKHCciKj1KBxpUqG1CwkyW71wUYU/edit?gid=1798066675#gid=1798066675)
-
+                **File:** [Temperature Data](https://docs.google.com/spreadsheets/d/1EA4iram3ngYgTIuoKHCciKj1KBxpUqG1CwkyW71wUYU/edit)
+                
                 <span style="color:#FFD700;"><strong>Stage 2: Filtering Data Above 25°C</strong></span>
                 **Goal:** Create another tab in the spreadsheet containing only the data points where the temperature is above 25°C.
 
@@ -115,51 +121,19 @@ def show():
                 - Extend your script to filter out all the rows where the temperature is above 25°C.
                 - Save this filtered data in a new sheet named "Above_25".
 
-                **Deliverable:** A script that adds the "Above_25" tab to the Excel file.
-
                 <span style="color:#FFD700;"><strong>Stage 3: Visualizing Data on a Map</strong></span>
-                **Goal:** Visualize the data points from both the "Below_25" and "Above_25" tabs on a geographical map.
+                **Goal:** Visualize the data points from both tabs on a geographical map using a Python mapping library.
 
                 **Instructions:**
-                - Using a Python mapping library (such as folium, matplotlib, or plotly), plot the data points from both the "Below_25" and "Above_25" tabs.
-                - Use blue to represent the data points from the "Below_25" tab and red for the "Above_25" tab.
-                - Ensure the map accurately displays the temperature data at the correct coordinates.
-
-                **Deliverable:** A Python script that generates a map displaying the data points in blue and red.
-
-                <span style="color:#FFD700;"><strong>Final Task: Merging the Scripts</strong></span>
-                **Goal:** Combine all three stages into one cohesive Python script that performs the filtering and visualization tasks in sequence.
-
-                **Instructions:**
-                - Encapsulate the functionality of the three scripts (Stage 1, Stage 2, and Stage 3) into distinct functions.
-                - Write a master function that calls these functions in sequence:
-                    1. Filter the data below 25°C and save it to a new tab.
-                    2. Filter the data above 25°C and save it to another tab.
-                    3. Visualize both sets of data on a map.
-                - Ensure that the final script runs all the steps seamlessly.
-
-                **Deliverable:** A Python script that completes the entire task, from filtering the data to visualizing it on a map.
+                - Plot "Below_25" points in blue and "Above_25" points in red.
                 """, unsafe_allow_html=True)
         
         with tab2:
             st.markdown("""
             <span style="color:#FFD700;"><strong>Detailed Grading Breakdown:</strong></span>
-
-            <span style="color:#FFD700;"><strong>1. Code Grading (40 Points Total)</strong></span>
-            - **Library Imports (15 Points)**
-            - **Code Quality (10 Points)**
-            - **Sheet Creation (15 Points)**
-            - Should create "Below_25" tab.
-            - Should create "Above_25" tab.
-
-            <span style="color:#FFD700;"><strong>2. HTML File Grading (20 Points Total)</strong></span>
-
-            <span style="color:#FFD700;"><strong>3. Excel File Grading (40 Points Total)</strong></span>
-            - **Correct Sheets (15 Points):**
-              - The Excel file should have three sheets: "Sheet1", "Above_25", and "Below_25".
-            - **Correct Columns (15 Points):**
-              - Must include ("longitude", "latitude", "temperature").
-            - **Row Count for "Above_25" (10 Points)**
+            - **Code Grading (40 Points)**
+            - **HTML File Grading (20 Points)**
+            - **Excel File Grading (40 Points)**
             """, unsafe_allow_html=True)
 
         # ─────────────────────────────────────────────
@@ -188,7 +162,6 @@ def show():
         # ─────────────────────────────────────────────
         if all_uploaded and st.button("Submit Assignment", key="as3_submit_button"):
             try:
-                # save uploads to a temp folder
                 temp_dir = "temp_uploads"
                 os.makedirs(temp_dir, exist_ok=True)
                 html_path  = os.path.join(temp_dir, "uploaded_map.html")
@@ -197,14 +170,12 @@ def show():
                     with open(path, "wb") as f:
                         f.write(file.getvalue())
 
-                # grade
                 total_grade, breakdown = grade_assignment(code_input, html_path, excel_path)
                 if total_grade < 70:
                     st.error(f"You got {total_grade}/100. Please try again.")
                     return
 
-                # record grade in MySQL
-                conn = _get_conn()
+                conn = get_conn()
                 cur  = conn.cursor()
                 cur.execute(
                     "UPDATE records SET as3 = %s WHERE username = %s",
@@ -218,9 +189,7 @@ def show():
                     st.error("No record updated—please check the username.")
                     return
 
-                # optional GitHub push (no-op)
-                push_db_to_github(None)
-
+                push_db_to_github()
                 st.success(f"Your total grade: {total_grade}/100")
             except Exception as e:
                 st.error(f"An error occurred during submission: {e}")
