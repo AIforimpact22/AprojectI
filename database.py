@@ -10,36 +10,31 @@ Public functions (unchanged):
 
 import streamlit as st
 import mysql.connector
-from mysql.connector import errorcode, pooling
+from mysql.connector import errorcode
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Connection helper with connection pooling
+# Connection helper – one persistent connection per Streamlit session
 # ─────────────────────────────────────────────────────────────────────────────
 
 @st.cache_resource(show_spinner=False)
-def _get_pool():
-    """Singleton pool for MySQL connections using [mysql] from .streamlit/secrets.toml."""
-    cfg = st.secrets["mysql"]
-    return pooling.MySQLConnectionPool(
-        pool_name="mypool",
-        pool_size=10,  # You can adjust pool size as needed
-        host=cfg["host"],
-        port=int(cfg.get("port", 3306)),
-        user=cfg["user"],
-        password=cfg["password"],
-        database=cfg["database"],
-        autocommit=False,
-        use_pure=True,
-    )
-
 def _get_conn():
-    """Get a pooled MySQL connection."""
-    pool = _get_pool()
-    return pool.get_connection()
+    """Create (and cache) one MySQL connection per session using [mysql] from .streamlit/secrets.toml."""
+    cfg = st.secrets["mysql"]
+    conn = mysql.connector.connect(
+        host      = cfg["host"],
+        port      = int(cfg.get("port", 3306)),
+        user      = cfg["user"],
+        password  = cfg["password"],
+        database  = cfg["database"],
+        autocommit=False,
+        use_pure  = True,
+    )
+    return conn
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Schema bootstrap (idempotent)
 # ─────────────────────────────────────────────────────────────────────────────
+
 def create_tables() -> None:
     """Ensure tables + trigger exist; safe to call repeatedly."""
     ddl = [
@@ -98,28 +93,25 @@ def create_tables() -> None:
         END
         """,
     ]
-
     conn = _get_conn()
     cur  = conn.cursor()
 
     for stmt in ddl:
         try:
-            cur.execute(stmt)          # no multi=True needed
-            # Clear any extra result-sets (for multi-statement trigger body)
+            cur.execute(stmt)
             while cur.nextset():
                 pass
         except mysql.connector.Error as e:
-            # Ignore benign race where trigger already exists
             if e.errno not in (errorcode.ER_TRG_ALREADY_EXISTS,):
                 st.error(f"DDL error: {e.msg}")
 
     conn.commit()
     cur.close()
-    conn.close()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Progress helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 def update_progress(username: str, week: int, tab_index: int) -> None:
     """Set the highest unlocked tab number for a given user/week."""
     column = f"week{week}track"
@@ -131,8 +123,6 @@ def update_progress(username: str, week: int, tab_index: int) -> None:
     )
     conn.commit()
     cur.close()
-    conn.close()
-
 
 def get_progress(username: str, week: int) -> int:
     """Return the current unlocked tab for user/week (0 if none)."""
@@ -145,12 +135,12 @@ def get_progress(username: str, week: int) -> int:
     )
     row = cur.fetchone()
     cur.close()
-    conn.close()
     return int(row[0]) if row and row[0] is not None else 0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI helper – run `python database.py` locally to bootstrap the schema
 # ─────────────────────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":  # pragma: no cover
     create_tables()
     print("Tables and trigger ensured.")
