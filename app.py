@@ -42,6 +42,7 @@ def main():
         st.session_state["page"] = "offer"
 
     if st.session_state.get("logged_in", False):
+        # Logged-in users always see the sidebar
         show_sidebar()
         selected = st.session_state.get("page", "home")
 
@@ -49,14 +50,15 @@ def main():
             st.session_state["logged_in"] = False
             st.session_state["page"] = "offer"
             safe_rerun()
+
         elif selected == "home":
             show_home()
+
         else:
             if not enforce_week_gating(selected):
                 st.warning("You must complete the previous week before accessing this section.")
                 st.stop()
             try:
-                # Only try to import directly from selected module name
                 module = import_module(selected)
                 if hasattr(module, "show"):
                     module.show()
@@ -64,21 +66,33 @@ def main():
                     st.warning("The selected module does not have a 'show()' function.")
             except ImportError as e:
                 st.warning("Unknown selection: " + str(e))
+
     else:
-        if st.session_state["page"] == "offer":
+        # Not-logged-in flow
+        page = st.session_state["page"]
+        if page == "offer":
             import offer
             offer.show()
-        elif st.session_state["page"] == "login":
+
+        elif page == "login":
             import login
             login.show_login_create_account()
-        elif st.session_state["page"] == "loginx":
+
+        elif page == "loginx":
             st.warning("Course 2 Login is not available yet.")
             if st.button("Go Back"):
                 st.session_state["page"] = "offer"
                 safe_rerun()
-        elif st.session_state["page"] == "course2_app":
+
+        elif page == "course2_app":
             from second.appx import appx
             appx.show()
+
+        elif page == "home":
+            # Even before logging in, allow viewing Home with sidebar
+            show_sidebar()
+            show_home()
+
         else:
             import login
             login.show_login_create_account()
