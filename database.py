@@ -1,55 +1,46 @@
-# database.py  – MySQL-only helpers + schema bootstrap
-# ----------------------------------------------------Add commentMore actions
-# Public API (unchanged):
-#   ▸ create_tables()
-#   ▸ update_progress(username, week:int, tab_index:int)
-#   ▸ get_progress(username, week:int) -> int
-#
-# Import this module once at app start and call create_tables().
-"""
-database.py  – MySQL helper layer + schema bootstrap
-====================================================
-
-Public functions (unchanged):
-    ▸ create_tables()
-    ▸ update_progress(username, week:int, tab_index:int)
-    ▸ get_progress(username, week:int) -> int
-"""
-
+# database.py  –– MySQL-only implementation
 import streamlit as st
 import mysql.connector
 from mysql.connector import errorcode
 
-# ──────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
-# Connection helper
-# ──────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
+# --------------------------------------------------------------------------- #
+# INTERNAL: connection helper
+# --------------------------------------------------------------------------- #
 def _get_conn():
-    """Return a MySQL connection using [mysql] from .streamlit/secrets.toml."""
+    """
+    Return a MySQL connection built from secrets.toml:
+
+        [mysql]
+        host     = "..."
+        port     = 3306
+        user     = "..."
+        password = "..."
+        database = "..."
+
+    Streamlit automatically injects these values into st.secrets.
+    """
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
-        host      = cfg["host"],
-        port      = int(cfg.get("port", 3306)),
-        user      = cfg["user"],
-        password  = cfg["password"],
-        database  = cfg["database"],
-        autocommit=False,
-        use_pure  = True,          # ← ensures execute(..., multi=True) isn’t needed
-        use_pure  = True,       # force pure-Python cursor (works on all versions)
+        host     = cfg["host"],
+        port     = int(cfg.get("port", 3306)),
+        user     = cfg["user"],
+        password = cfg["password"],
+        database = cfg["database"],
+        autocommit = False,           # we’ll manage commits ourselves
     )
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Schema bootstrap
-# ──────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
-# Schema bootstrap (idempotent)
-# ─────────────────────────────────────────────────────────────────────────────
+# --------------------------------------------------------------------------- #
+# DDL: create/ensure schema
+# --------------------------------------------------------------------------- #
 def create_tables() -> None:
-    """Create users / records / progress tables + trigger.  Idempotent."""
-    """Ensure tables + trigger exist; safe to call repeatedly."""
+    """
+    Ensure `users`, `records`, `progress` tables and the `after_user_insert`
+    trigger exist.  Safe to call repeatedly.
+    """
     ddl = [
-        # users ----------------------------------------------------------------
+        # ------------------------------------------------------------------ #
+        # users
+        # ------------------------------------------------------------------ #
         """
         CREATE TABLE IF NOT EXISTS users (
             fullname        VARCHAR(100),
@@ -58,11 +49,13 @@ def create_tables() -> None:
             username        VARCHAR(50)  UNIQUE,
             password        VARCHAR(100),
             date_of_joining DATE         DEFAULT CURRENT_DATE,
-            date_of_joining DATE,
             approved        TINYINT      DEFAULT 0
         )
         """,
-        # records --------------------------------------------------------------
+
+        # ------------------------------------------------------------------ #
+        # records
+        # ------------------------------------------------------------------ #
         """
         CREATE TABLE IF NOT EXISTS records (
             username VARCHAR(50)  UNIQUE,
@@ -75,11 +68,14 @@ def create_tables() -> None:
             quiz2    FLOAT        DEFAULT NULL,
             total    FLOAT GENERATED ALWAYS AS (
                        as1 + as2 + as3 + as4 +
-                       IFNULL(quiz1,0) + IFNULL(quiz2,0)
+                       IFNULL(quiz1, 0) + IFNULL(quiz2, 0)
                      ) STORED
         )
         """,
-        # progress -------------------------------------------------------------
+
+        # ------------------------------------------------------------------ #
+        # progress
+        # ------------------------------------------------------------------ #
         """
         CREATE TABLE IF NOT EXISTS progress (
             username   VARCHAR(50)  UNIQUE,
@@ -91,10 +87,11 @@ def create_tables() -> None:
             week5track INT          DEFAULT 0
         )
         """,
-        # drop trigger if it exists -------------------------------------------
-        # drop + recreate trigger ---------------------------------------------
+
+        # ------------------------------------------------------------------ #
+        # trigger (drop if exists, then recreate)
+        # ------------------------------------------------------------------ #
         "DROP TRIGGER IF EXISTS after_user_insert",
-        # create trigger -------------------------------------------------------
         """
         CREATE TRIGGER after_user_insert
         AFTER INSERT ON users
@@ -113,15 +110,11 @@ def create_tables() -> None:
 
     for stmt in ddl:
         try:
-            cur.execute(stmt)      # no multi=True  → works on every driver build
-            while cur.nextset():   # quietly clear extra result sets
-            cur.execute(stmt)          # no multi=True needed
-            # Clear any extra result-sets (for multi-statement trigger body)
-            while cur.nextset():
-                pass
+            # The CREATE TRIGGER body contains multiple statements, so we
+            # let MySQL-Connector parse them by passing multi=True.
+            cur.execute(stmt, multi=True)
         except mysql.connector.Error as e:
-            # Ignore benign “trigger already exists” race
-            # Ignore benign race where trigger already exists
+            # Ignore benign “trigger already exists” in race/permissions cases
             if e.errno not in (errorcode.ER_TRG_ALREADY_EXISTS,):
                 st.error(f"DDL error: {e.msg}")
 
@@ -129,13 +122,13 @@ def create_tables() -> None:
     cur.close()
     conn.close()
 
-# ──────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
-# Progress helpers
-# ──────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
+# --------------------------------------------------------------------------- #
+# PROGRESS HELPERS
+# --------------------------------------------------------------------------- #
 def update_progress(username: str, week: int, tab_index: int) -> None:
-    """Set the highest unlocked tab number for a given user/week."""
+    """
+    Update the highest unlocked tab number for a given user/week.
+    """
     column = f"week{week}track"
     conn   = _get_conn()
     cur    = conn.cursor()
@@ -147,9 +140,10 @@ def update_progress(username: str, week: int, tab_index: int) -> None:
     cur.close()
     conn.close()
 
-
 def get_progress(username: str, week: int) -> int:
-    """Return the current unlocked tab for user/week (0 if none)."""
+    """
+    Return the current highest unlocked tab for a given user/week (0 if none).
+    """
     column = f"week{week}track"
     conn   = _get_conn()
     cur    = conn.cursor()
@@ -162,14 +156,8 @@ def get_progress(username: str, week: int) -> int:
     conn.close()
     return int(row[0]) if row and row[0] is not None else 0
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# CLI helper – run `python database.py` once to bootstrap schema locally
-# ──────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
-# CLI helper – run `python database.py` locally to bootstrap the schema
-# ─────────────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":  # pragma: no cover
+# --------------------------------------------------------------------------- #
+# CLI helper: run `python database.py` once to bootstrap the schema
+# --------------------------------------------------------------------------- #
+if __name__ == "__main__":
     create_tables()
-    print("Tables & trigger ensured.")
-    print("Tables and trigger ensured.")
