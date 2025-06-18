@@ -11,9 +11,9 @@ import mysql.connector
 from mysql.connector import errorcode
 
 # --------------------------------------------------------------------------- #
-# Singleton cached connection (avoids reconnect on every rerun)
+# Cached connection (avoids reconnect on every rerun)
 # --------------------------------------------------------------------------- #
-@st.experimental_singleton
+@st.cache(allow_output_mutation=True)
 def get_cached_conn():
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
@@ -26,9 +26,9 @@ def get_cached_conn():
     )
 
 # --------------------------------------------------------------------------- #
-# Cache the username‐exists check
+# Cache username‐exists check
 # --------------------------------------------------------------------------- #
-@st.cache_data(show_spinner=False)
+@st.cache(allow_output_mutation=True, show_spinner=False)
 def user_exists(username: str) -> bool:
     conn = get_cached_conn()
     cur = conn.cursor()
@@ -40,9 +40,8 @@ def user_exists(username: str) -> bool:
 # --------------------------------------------------------------------------- #
 # Cache exec+capture logic so reruns with the same code string are fast
 # --------------------------------------------------------------------------- #
-@st.cache_data(show_spinner=False)
+@st.cache(allow_output_mutation=True, show_spinner=False)
 def run_and_capture(code_str: str):
-    # Capture stdout
     captured = StringIO()
     import sys
     old_stdout = sys.stdout
@@ -67,9 +66,10 @@ def run_and_capture(code_str: str):
 # Optional GitHub-push stub (keeps old code paths alive without changing them)
 # --------------------------------------------------------------------------- #
 try:
-    from github_sync import push_db_to_github        # noqa: F401
+    from github_sync import push_db_to_github  # noqa: F401
 except ModuleNotFoundError:
-    def push_db_to_github(*_args, **_kwargs):
+    def push_db_to_github(*_args, **_kwargs):  # noqa: D401
+        """No-op stub – DB already lives in MySQL, nothing to push."""
         return {"success": True}
 
 # --------------------------------------------------------------------------- #
@@ -90,9 +90,10 @@ def show():
 
     st.title("Assignment 1: Mapping Coordinates and Calculating Distances")
 
-    # ───────────────── Tabs for details ─────────────────
+    # ————————————————————————————— Tabs for details —————————————————————————————
     st.markdown('<h1 style="color: #ADD8E6;">Step 2: Review Assignment Details</h1>', unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["Assignment Details", "Grading Details"])
+
     with tab1:
         st.markdown("""
         ### Objective
@@ -162,8 +163,11 @@ def show():
                 - Checks if the calculated distances are accurate within a 100-meter tolerance.
             """, unsafe_allow_html=True)
 
-    # ───────────────── Username entry ─────────────────
-    st.markdown('<h1 style="color:#ADD8E6;">Step 1: Enter Your Username</h1>', unsafe_allow_html=True)
+    # ————————————————————————————— Username entry —————————————————————————————
+    st.markdown(
+        '<h1 style="color:#ADD8E6;">Step 1: Enter Your Username</h1>',
+        unsafe_allow_html=True,
+    )
     username_input = st.text_input("Username", key="as1_username")
     if st.button("Enter", key="enter_user"):
         if not username_input:
@@ -177,11 +181,15 @@ def show():
                 st.error("Invalid username. Please enter a registered username.")
                 st.session_state["username_entered"] = False
 
-    # ───────────────── Code execution & grading ─────────────────
+    # ————————————————————————————— Code execution & grading —————————————————————————————
     if st.session_state["username_entered"]:
-        st.markdown('<h1 style="color:#ADD8E6;">Step 3: Run and Submit Your Code</h1>', unsafe_allow_html=True)
+        st.markdown(
+            '<h1 style="color:#ADD8E6;">Step 3: Run and Submit Your Code</h1>',
+            unsafe_allow_html=True,
+        )
         code_input = st.text_area("📝 Paste Your Code Here", height=300, key="as1_code")
 
+        # Run Code button
         if st.button("Run Code", key="run_code"):
             st.session_state.update(
                 run_success=False,
@@ -209,6 +217,7 @@ def show():
                 st.markdown("### 📊 DataFrame Output")
                 st.dataframe(dfobj)
 
+        # Submit Code button
         if st.session_state["run_success"] and st.button("Submit Code", key="submit_code"):
             from grades.grade1 import grade_assignment
             grade = grade_assignment(code_input)
@@ -219,7 +228,7 @@ def show():
             else:
                 try:
                     conn = get_cached_conn()
-                    cur = conn.cursor()
+                    cur  = conn.cursor()
                     cur.execute(
                         "UPDATE records SET as1 = %s WHERE username = %s",
                         (grade, st.session_state["username"]),
