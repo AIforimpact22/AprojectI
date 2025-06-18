@@ -1,5 +1,5 @@
 import streamlit as st
-from theme import apply_dark_themeMore actions
+from theme import apply_dark_theme
 from database import create_tables
 from sidebar import show_sidebar
 from home import show_home
@@ -18,20 +18,12 @@ def safe_rerun():
         st.error("Streamlit rerun functionality is not available.")
 
 def enforce_week_gating(selected):
-    """
-    Enforces that a weekly module is accessible only if the previous week is fully completed.
-    For example, if Week 1 has 10 tabs, then Week 2 will be unlocked only if the user's progress
-    for "week1" is 10. Similarly, Week 3 will be unlocked only if "week2" progress is 12, etc.
-    """
     if selected.startswith("modules_week"):
         try:
             week = int(selected.replace("modules_week", ""))
         except ValueError:
-            return True  # Allow if the format is invalid.
             return True
         if week == 1:
-            return True  # Week 1 is always accessible.
-        # Define required progress for previous weeks.
             return True
         required_progress = {2: 10, 3: 12, 4: 12, 5: 7}
         username = st.session_state.get("username", "default_user")
@@ -46,11 +38,6 @@ def main():
     apply_dark_theme()
     create_tables()
 
-    # Add the 'updates' folder to sys.path so that modules within it can be imported.
-    updates_path = os.path.abspath("updates")
-    if os.path.isdir(updates_path) and updates_path not in sys.path:
-        sys.path.append(updates_path)
-    
     if "page" not in st.session_state:
         st.session_state["page"] = "offer"
 
@@ -65,17 +52,10 @@ def main():
         elif selected == "home":
             show_home()
         else:
-            # Use gating logic based on GitHub progress.
             if not enforce_week_gating(selected):
                 st.warning("You must complete the previous week before accessing this section.")
                 st.stop()
             try:
-                # First, try importing the module with the given name.
-                try:
-                    module = import_module(selected)
-                except ImportError:
-                    # If not found, try importing from the updates folder.
-                    module = import_module("updates." + selected)
                 # Only try to import directly from selected module name
                 module = import_module(selected)
                 if hasattr(module, "show"):
@@ -106,4 +86,74 @@ def main():
     show_footer()
 
 if __name__ == "__main__":
-    main()
+    main()                                
+import streamlit as st
+
+def show_sidebar():
+    # Custom CSS for sidebar styling (removed animated title CSS)
+    st.markdown("""
+        <style>
+        /* Sidebar container padding */
+        .css-1d391kg {
+            padding: 2rem 1rem;
+        }
+        
+        /* Expander styling */
+        .streamlit-expanderHeader {
+            background-color: #f0f2f6;
+            border-radius: 5px;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Button styling */
+        .stButton button {
+            background-color: transparent;
+            border: 1px solid #4ECDC4;
+            color: #4ECDC4;
+            transition: all 0.3s ease;
+        }
+        
+        .stButton button:hover {
+            background-color: #4ECDC4;
+            color: white;
+            transform: translateY(-2px);
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+    with st.sidebar:
+        # Display logo above the sidebar content.
+        st.image("logo.jpg", use_container_width=True)
+
+        # Home section
+        with st.expander("🏠 HOME", expanded=False):
+            if st.button("Home Page", key="home", use_container_width=True):
+                st.session_state["page"] = "home"
+
+        # Modules section
+        with st.expander("📘 MODULES", expanded=False):
+            if st.button("Introduction", key="modules_intro", use_container_width=True):
+                st.session_state["page"] = "modules_intro"
+            if st.button("Week 1: Introduction to Coding", key="modules_week1", use_container_width=True):
+                st.session_state["page"] = "modules_week1"
+            if st.button("Week 2: Generate Comprehensive Codings", key="modules_week2", use_container_width=True):
+                st.session_state["page"] = "modules_week2"
+            if st.button("Week 3: Deploy App through Github and Streamlit", key="modules_week3", use_container_width=True):
+                st.session_state["page"] = "modules_week3"
+            if st.button("Week 4: Data Week", key="modules_week4", use_container_width=True):
+                st.session_state["page"] = "modules_week4"
+            if st.button("Week 5: Finalizing and Showcasing Your Personalized Project", key="modules_week5", use_container_width=True):
+                st.session_state["page"] = "modules_week5"
+
+        # Help section
+        with st.expander("❓ HELP", expanded=False):
+            if st.button("Help Center", key="help", use_container_width=True):
+                st.session_state["page"] = "help"
+
+        # Logout section
+        with st.expander("🚪 LOGOUT", expanded=False):
+            if st.button("Logout", key="logout", use_container_width=True):
+                st.session_state["page"] = "logout"
+
+    # Return the currently selected page or default to "home"
+    return st.session_state.get("page", "home") 
