@@ -1,4 +1,5 @@
 # as1.py – MySQL version (no local .db file required)
+
 import streamlit as st
 import folium
 import pandas as pd
@@ -10,19 +11,10 @@ import mysql.connector
 from mysql.connector import errorcode
 
 # --------------------------------------------------------------------------- #
-# Optional GitHub-push stub (keeps old code paths alive without changing them)
+# Singleton cached connection (avoids reconnect on every rerun)
 # --------------------------------------------------------------------------- #
-try:
-    from github_sync import push_db_to_github        # noqa: F401
-except ModuleNotFoundError:
-    def push_db_to_github(*_args, **_kwargs):        # noqa: D401
-        """No-op stub – DB already lives in MySQL, nothing to push."""
-        return {"success": True}
-
-# --------------------------------------------------------------------------- #
-# DB helper – centralise MySQL connection
-# --------------------------------------------------------------------------- #
-def _get_conn():
+@st.experimental_singleton
+def get_cached_conn():
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
         host=cfg["host"],
@@ -32,6 +24,53 @@ def _get_conn():
         database=cfg["database"],
         autocommit=False,
     )
+
+# --------------------------------------------------------------------------- #
+# Cache the username‐exists check
+# --------------------------------------------------------------------------- #
+@st.cache_data(show_spinner=False)
+def user_exists(username: str) -> bool:
+    conn = get_cached_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM records WHERE username = %s LIMIT 1", (username,))
+    found = cur.fetchone() is not None
+    cur.close()
+    return found
+
+# --------------------------------------------------------------------------- #
+# Cache exec+capture logic so reruns with the same code string are fast
+# --------------------------------------------------------------------------- #
+@st.cache_data(show_spinner=False)
+def run_and_capture(code_str: str):
+    # Capture stdout
+    captured = StringIO()
+    import sys
+    old_stdout = sys.stdout
+    sys.stdout = captured
+
+    local_ctx = {}
+    exec(code_str, {}, local_ctx)
+
+    sys.stdout = old_stdout
+
+    map_obj = None
+    df_obj = None
+    for obj in local_ctx.values():
+        if isinstance(obj, folium.Map):
+            map_obj = obj
+        elif isinstance(obj, pd.DataFrame):
+            df_obj = obj
+
+    return captured.getvalue(), map_obj, df_obj
+
+# --------------------------------------------------------------------------- #
+# Optional GitHub-push stub (keeps old code paths alive without changing them)
+# --------------------------------------------------------------------------- #
+try:
+    from github_sync import push_db_to_github        # noqa: F401
+except ModuleNotFoundError:
+    def push_db_to_github(*_args, **_kwargs):
+        return {"success": True}
 
 # --------------------------------------------------------------------------- #
 # MAIN UI
@@ -51,17 +90,16 @@ def show():
 
     st.title("Assignment 1: Mapping Coordinates and Calculating Distances")
 
-    # ————————————————————————————— Tabs for details —————————————————————————————
+    # ───────────────── Tabs for details ─────────────────
     st.markdown('<h1 style="color: #ADD8E6;">Step 2: Review Assignment Details</h1>', unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["Assignment Details", "Grading Details"])
-
     with tab1:
         st.markdown("""
         ### Objective
         In this assignment, you will write a Python script to plot three geographical coordinates on a map and calculate the distance between each pair of points in kilometers. This will help you practice working with geospatial data and Python libraries for mapping and calculations.
         
         **Assignment: Week 1 – Mapping Coordinates and Calculating Distances in Python**
-        """)
+        """, unsafe_allow_html=True)
         with st.expander("See More"):
             st.markdown("""
             <span style="color: #FFD700;"><strong>Task Requirements:</strong></span>
@@ -91,7 +129,7 @@ def show():
         - **Code Structure and Implementation:** 30 points
         - **Map Visualization:** 40 points
         - **Distance Calculations:** 30 points
-        """)
+        """, unsafe_allow_html=True)
         st.markdown("""
         #### 1. Code Structure and Implementation (30 points)
         - **Library Imports (5 points):**
@@ -105,7 +143,7 @@ def show():
             - **Spacing:** 2 points (deducted if improper spacing is found).
             - **Comments:** 2 points (deducted if no comments are present).
             - **Code Organization:** 2 points (deducted if no blank lines are used for separation).
-        """)
+        """, unsafe_allow_html=True)
         with st.expander("See More"):
             st.markdown("""
             #### 2. Map Visualization (40 points)
@@ -122,32 +160,16 @@ def show():
                 - Checks if the geodesic function is used correctly.
             - **Distance Accuracy (20 points):**
                 - Checks if the calculated distances are accurate within a 100-meter tolerance.
-            """)
+            """, unsafe_allow_html=True)
 
-    # ————————————————————————————— Username entry —————————————————————————————
-    st.markdown(
-        '<h1 style="color:#ADD8E6;">Step 1: Enter Your Username</h1>',
-        unsafe_allow_html=True,
-    )
+    # ───────────────── Username entry ─────────────────
+    st.markdown('<h1 style="color:#ADD8E6;">Step 1: Enter Your Username</h1>', unsafe_allow_html=True)
     username_input = st.text_input("Username", key="as1_username")
     if st.button("Enter", key="enter_user"):
         if not username_input:
             st.error("Please enter a username.")
         else:
-            try:
-                conn = _get_conn()
-                cur  = conn.cursor()
-                cur.execute(
-                    "SELECT 1 FROM records WHERE username = %s LIMIT 1",
-                    (username_input,),
-                )
-                exists = cur.fetchone() is not None
-            except Exception as e:
-                st.error(f"Error checking username: {e}")
-                exists = False
-            finally:
-                conn.close()
-            if exists:
+            if user_exists(username_input):
                 st.session_state["username_entered"] = True
                 st.session_state["username"]         = username_input
                 st.success(f"Welcome, {username_input}!")
@@ -155,15 +177,11 @@ def show():
                 st.error("Invalid username. Please enter a registered username.")
                 st.session_state["username_entered"] = False
 
-    # ————————————————————————————— Code execution & grading —————————————————————————————
+    # ───────────────── Code execution & grading ─────────────────
     if st.session_state["username_entered"]:
-        st.markdown(
-            '<h1 style="color:#ADD8E6;">Step 3: Run and Submit Your Code</h1>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<h1 style="color:#ADD8E6;">Step 3: Run and Submit Your Code</h1>', unsafe_allow_html=True)
         code_input = st.text_area("📝 Paste Your Code Here", height=300, key="as1_code")
 
-        # Run Code button
         if st.button("Run Code", key="run_code"):
             st.session_state.update(
                 run_success=False,
@@ -171,87 +189,58 @@ def show():
                 map_object=None,
                 dataframe_object=None,
             )
-            try:
-                captured = StringIO()
-                import sys
-                old_stdout = sys.stdout
-                sys.stdout = captured
+            out, mobj, dfobj = run_and_capture(code_input)
+            st.session_state["captured_output"] = out
+            st.session_state["map_object"]       = mobj
+            st.session_state["dataframe_object"] = dfobj
+            st.session_state["run_success"]      = True
 
-                local_ctx = {}
-                exec(code_input, {}, local_ctx)
-
-                sys.stdout = old_stdout
-                st.session_state["captured_output"] = captured.getvalue()
-
-                # detect folium.Map or DataFrame
-                for obj in local_ctx.values():
-                    if isinstance(obj, folium.Map):
-                        st.session_state["map_object"] = obj
-                    elif isinstance(obj, pd.DataFrame):
-                        st.session_state["dataframe_object"] = obj
-
-                st.session_state["run_success"] = True
-                st.success("✅ Code ran successfully!")
-            except Exception as e:
-                sys.stdout = old_stdout
-                st.error(f"Error while running code: {e}")
-
-        # show outputs if run succeeded
-        if st.session_state["run_success"]:
-            if st.session_state["captured_output"]:
+            if out:
                 st.markdown("### 📄 Captured Output")
                 st.markdown(
                     f'<pre style="color:white;white-space:pre-wrap;">'
-                    f'{st.session_state["captured_output"].replace(chr(10), "<br>")}'
-                    "</pre>",
+                    f'{out.replace(chr(10), "<br>")}</pre>',
                     unsafe_allow_html=True,
                 )
-            if st.session_state["map_object"]:
+            if mobj:
                 st.markdown("### 🗺️ Map Output")
-                st_folium(st.session_state["map_object"], width=1000, height=500)
-            if st.session_state["dataframe_object"] is not None:
+                st_folium(mobj, width=1000, height=500)
+            if dfobj is not None:
                 st.markdown("### 📊 DataFrame Output")
-                st.dataframe(st.session_state["dataframe_object"])
+                st.dataframe(dfobj)
 
-            # —————————————————————— Submit Code button ——————————————————————
-            if st.button("Submit Code", key="submit_code"):
-                # 1. Grade the code
-                from grades.grade1 import grade_assignment
-                grade = grade_assignment(code_input)
-                st.write(f"**Calculated Grade:** {grade}/100")
+        if st.session_state["run_success"] and st.button("Submit Code", key="submit_code"):
+            from grades.grade1 import grade_assignment
+            grade = grade_assignment(code_input)
+            st.write(f"**Calculated Grade:** {grade}/100")
 
-                if grade < 70:
-                    st.error(f"You got {grade}/100. Please revise and try again.")
-                else:
-                    # 2. Update the database
-                    try:
-                        conn = _get_conn()
-                        cur  = conn.cursor()
+            if grade < 70:
+                st.error(f"You got {grade}/100. Please revise and try again.")
+            else:
+                try:
+                    conn = get_cached_conn()
+                    cur = conn.cursor()
+                    cur.execute(
+                        "UPDATE records SET as1 = %s WHERE username = %s",
+                        (grade, st.session_state["username"]),
+                    )
+                    conn.commit()
+                    if cur.rowcount == 0:
+                        st.error("⚠️ No record updated—please check the username.")
+                    else:
+                        push_db_to_github()
                         cur.execute(
-                            "UPDATE records SET as1 = %s WHERE username = %s",
-                            (grade, st.session_state["username"]),
+                            "SELECT as1 FROM records WHERE username = %s",
+                            (st.session_state["username"],),
                         )
-                        conn.commit()
-                        if cur.rowcount == 0:
-                            st.error("⚠️ No record updated—please check the username.")
-                        else:
-                            # 3. Optional GitHub push
-                            push_db_to_github()
-
-                            # 4. Fetch back to confirm
-                            cur.execute(
-                                "SELECT as1 FROM records WHERE username = %s",
-                                (st.session_state["username"],),
-                            )
-                            new_grade = cur.fetchone()[0]
-                            st.success(f"🎉 Submission successful! Your grade: {new_grade}/100")
-                            # reset for next time
-                            st.session_state["username_entered"] = False
-                            st.session_state["username"] = ""
-                    except Exception as e:
-                        st.error(f"Database error: {e}")
-                    finally:
-                        conn.close()
+                        new_grade = cur.fetchone()[0]
+                        st.success(f"🎉 Submission successful! Your grade: {new_grade}/100")
+                        st.session_state["username_entered"] = False
+                        st.session_state["username"] = ""
+                except Exception as e:
+                    st.error(f"Database error: {e}")
+                finally:
+                    conn.close()
 
 if __name__ == "__main__":
     show()
