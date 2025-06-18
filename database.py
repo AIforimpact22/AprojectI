@@ -1,10 +1,11 @@
 # database.py
 
-import mysql.connector
-from mysql.connector import errorcode, InterfaceError
 import streamlit as st
+import mysql.connector
+from mysql.connector import errorcode
 
 def _get_conn():
+    """Return a brand‐new MySQL connection from Streamlit secrets."""
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
         host       = cfg["host"],
@@ -13,25 +14,16 @@ def _get_conn():
         password   = cfg["password"],
         database   = cfg["database"],
         autocommit = False,
-        connection_timeout=10,
+        connection_timeout = 10,
     )
 
 def create_tables():
     """
-    Ensure all necessary tables exist in the MySQL database.
-    Safely pings and reconnects if needed to avoid IndexError in ping().
+    Ensure all required tables exist. Opens a new connection for each CREATE
+    statement to avoid stale‐socket ping errors.
     """
-    # 1) Establish or re-establish connection
-    try:
-        conn = _get_conn()
-        # force a reconnect if the ping fails
-        conn.ping(reconnect=True, attempts=3, delay=2)
-    except InterfaceError:
-        conn = _get_conn()
-
-    cur = conn.cursor()
-    # List your DDL statements here, one per string
-    ddl = [
+    # List your CREATE statements here, one per entry
+    ddl_statements = [
         """
         CREATE TABLE IF NOT EXISTS users (
             fullname VARCHAR(100),
@@ -52,16 +44,23 @@ def create_tables():
             as4 INT DEFAULT NULL
         )
         """,
-        # … add any other CREATE TABLE statements you need …
+        # … add any additional CREATE TABLE statements here …
     ]
 
-    # 2) Execute each DDL statement safely
-    for stmt in ddl:
+    for stmt in ddl_statements:
+        conn = None
+        cur  = None
         try:
+            conn = _get_conn()
+            cur  = conn.cursor()
             cur.execute(stmt)
+            conn.commit()
         except mysql.connector.Error as e:
-            # log but continue on errors (e.g. “table already exists”)
-            st.warning(f"Warning creating table: {e.msg}")
-    conn.commit()
-    cur.close()
-    conn.close()
+            # Ignore "table already exists" errors, warn on others
+            if e.errno not in (errorcode.ER_TABLE_EXISTS_ERROR,):
+                st.warning(f"Error creating table: {e.msg}")
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
