@@ -9,7 +9,7 @@ from mysql.connector import errorcode
 # ──────────────────────────────────────────────────────────────────────────────
 # Cached connection helper
 # ──────────────────────────────────────────────────────────────────────────────
-@st.cache(allow_output_mutation=True)
+@st.cache_resource
 def _get_conn():
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
@@ -24,7 +24,7 @@ def _get_conn():
 # ──────────────────────────────────────────────────────────────────────────────
 # Cache username verification
 # ──────────────────────────────────────────────────────────────────────────────
-@st.cache(allow_output_mutation=True, show_spinner=False)
+@st.cache_data(show_spinner=False)
 def username_exists(username: str) -> bool:
     conn = _get_conn()
     cur  = conn.cursor()
