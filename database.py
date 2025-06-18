@@ -13,28 +13,29 @@ import mysql.connector
 from mysql.connector import errorcode, pooling
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Connection Pool (singleton via Streamlit session_state)
+# Connection helper with connection pooling
 # ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_resource(show_spinner=False)
 def _get_pool():
-    """Return a singleton connection pool, created from Streamlit secrets."""
-    if "mysql_pool" not in st.session_state:
-        cfg = st.secrets["mysql"]
-        st.session_state.mysql_pool = pooling.MySQLConnectionPool(
-            pool_name="mypool",
-            pool_size=8,  # adjust as needed, 8 is a good default
-            host=cfg["host"],
-            port=int(cfg.get("port", 3306)),
-            user=cfg["user"],
-            password=cfg["password"],
-            database=cfg["database"],
-            autocommit=False,
-            use_pure=True,
-        )
-    return st.session_state.mysql_pool
+    """Singleton pool for MySQL connections using [mysql] from .streamlit/secrets.toml."""
+    cfg = st.secrets["mysql"]
+    return pooling.MySQLConnectionPool(
+        pool_name="mypool",
+        pool_size=10,  # You can adjust pool size as needed
+        host=cfg["host"],
+        port=int(cfg.get("port", 3306)),
+        user=cfg["user"],
+        password=cfg["password"],
+        database=cfg["database"],
+        autocommit=False,
+        use_pure=True,
+    )
 
 def _get_conn():
     """Get a pooled MySQL connection."""
-    return _get_pool().get_connection()
+    pool = _get_pool()
+    return pool.get_connection()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Schema bootstrap (idempotent)
@@ -103,10 +104,12 @@ def create_tables() -> None:
 
     for stmt in ddl:
         try:
-            cur.execute(stmt)
+            cur.execute(stmt)          # no multi=True needed
+            # Clear any extra result-sets (for multi-statement trigger body)
             while cur.nextset():
                 pass
         except mysql.connector.Error as e:
+            # Ignore benign race where trigger already exists
             if e.errno not in (errorcode.ER_TRG_ALREADY_EXISTS,):
                 st.error(f"DDL error: {e.msg}")
 
@@ -122,35 +125,32 @@ def update_progress(username: str, week: int, tab_index: int) -> None:
     column = f"week{week}track"
     conn   = _get_conn()
     cur    = conn.cursor()
-    try:
-        cur.execute(
-            f"UPDATE progress SET {column} = %s WHERE username = %s",
-            (tab_index, username),
-        )
-        conn.commit()
-    finally:
-        cur.close()
-        conn.close()
+    cur.execute(
+        f"UPDATE progress SET {column} = %s WHERE username = %s",
+        (tab_index, username),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
 
 def get_progress(username: str, week: int) -> int:
     """Return the current unlocked tab for user/week (0 if none)."""
     column = f"week{week}track"
     conn   = _get_conn()
     cur    = conn.cursor()
-    try:
-        cur.execute(
-            f"SELECT {column} FROM progress WHERE username = %s",
-            (username,),
-        )
-        row = cur.fetchone()
-        return int(row[0]) if row and row[0] is not None else 0
-    finally:
-        cur.close()
-        conn.close()
+    cur.execute(
+        f"SELECT {column} FROM progress WHERE username = %s",
+        (username,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return int(row[0]) if row and row[0] is not None else 0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI helper – run `python database.py` locally to bootstrap the schema
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":  # pragma: no cover
-    # Don't use st.secrets in CLI context, use your own config loading for local testing
-    print("WARNING: st.secrets only available in Streamlit. Use with Streamlit.")
+    create_tables()
+    print("Tables and trigger ensured.")
