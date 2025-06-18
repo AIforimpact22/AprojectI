@@ -8,15 +8,17 @@ from io import StringIO
 from streamlit_folium import st_folium
 from utils.style1 import set_page_style
 import mysql.connector
-from mysql.connector import errorcode
+from mysql.connector import pooling
 
-# --------------------------------------------------------------------------- #
-# Cached connection (avoids reconnect on every rerun)
-# --------------------------------------------------------------------------- #
+# ──────────────────────────────────────────────────────────────────────────────
+# Initialize a MySQL connection pool once per session
+# ──────────────────────────────────────────────────────────────────────────────
 @st.cache_resource
-def get_cached_conn():
+def init_conn_pool():
     cfg = st.secrets["mysql"]
-    return mysql.connector.connect(
+    return pooling.MySQLConnectionPool(
+        pool_name="mypool_as1",
+        pool_size=5,
         host=cfg["host"],
         port=int(cfg.get("port", 3306)),
         user=cfg["user"],
@@ -25,21 +27,25 @@ def get_cached_conn():
         autocommit=False,
     )
 
-# --------------------------------------------------------------------------- #
+def get_conn():
+    return init_conn_pool().get_connection()
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Cache username‐exists check
-# --------------------------------------------------------------------------- #
+# ──────────────────────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def user_exists(username: str) -> bool:
-    conn = get_cached_conn()
-    cur = conn.cursor()
+    conn = get_conn()
+    cur  = conn.cursor()
     cur.execute("SELECT 1 FROM records WHERE username = %s LIMIT 1", (username,))
     found = cur.fetchone() is not None
     cur.close()
+    conn.close()
     return found
 
-# --------------------------------------------------------------------------- #
+# ──────────────────────────────────────────────────────────────────────────────
 # Cache exec+capture logic so reruns with the same code string are fast
-# --------------------------------------------------------------------------- #
+# ──────────────────────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def run_and_capture(code_str: str):
     captured = StringIO()
@@ -62,19 +68,18 @@ def run_and_capture(code_str: str):
 
     return captured.getvalue(), map_obj, df_obj
 
-# --------------------------------------------------------------------------- #
-# Optional GitHub-push stub (keeps old code paths alive without changing them)
-# --------------------------------------------------------------------------- #
+# ──────────────────────────────────────────────────────────────────────────────
+# Optional GitHub-push stub (no-op)
+# ──────────────────────────────────────────────────────────────────────────────
 try:
     from github_sync import push_db_to_github  # noqa: F401
 except ModuleNotFoundError:
-    def push_db_to_github(*_args, **_kwargs):  # noqa: D401
-        """No-op stub – DB already lives in MySQL, nothing to push."""
+    def push_db_to_github(*args, **kwargs):
         return {"success": True}
 
-# --------------------------------------------------------------------------- #
+# ──────────────────────────────────────────────────────────────────────────────
 # MAIN UI
-# --------------------------------------------------------------------------- #
+# ──────────────────────────────────────────────────────────────────────────────
 def show():
     set_page_style()
 
@@ -227,7 +232,7 @@ def show():
                 st.error(f"You got {grade}/100. Please revise and try again.")
             else:
                 try:
-                    conn = get_cached_conn()
+                    conn = get_conn()
                     cur  = conn.cursor()
                     cur.execute(
                         "UPDATE records SET as1 = %s WHERE username = %s",
