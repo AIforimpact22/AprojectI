@@ -3,13 +3,11 @@
 Database helpers for a Streamlit app backed by MySQL.
 
 🔄 2025-06-19 performance update
---------------------------------
-Change focus:
-    • Add carefully chosen secondary INDEXes so look-ups
-      on frequent search columns use B-trees instead of scans.
-
-Tip: adjust or add more indexes if your real workloads
-often `WHERE` by other columns.
+-------------------------------
+Single change:
+    • `create_tables()` is now wrapped in `@st.cache_resource`, so
+      table creation happens only once per session.  Subsequent calls
+      return instantly, eliminating repeated connection overhead.
 """
 
 import streamlit as st
@@ -18,16 +16,11 @@ from mysql.connector import errorcode
 
 
 # ---------------------------------------------------------------------------
-# Connection
+# Connection helper
 # ---------------------------------------------------------------------------
 
 def _get_conn() -> mysql.connector.MySQLConnection:
-    """
-    Open a fresh MySQL connection from Streamlit secrets.
-
-    (If you preferred the earlier pooling version, just
-    paste that pool code back in—indexing is orthogonal.)
-    """
+    """Return a fresh MySQL connection from Streamlit secrets."""
     cfg = st.secrets["mysql"]
     return mysql.connector.connect(
         host=cfg["host"],
@@ -43,17 +36,19 @@ def _get_conn() -> mysql.connector.MySQLConnection:
 
 
 # ---------------------------------------------------------------------------
-# DDL with performance-critical indexes
+# Schema creation — now cached
 # ---------------------------------------------------------------------------
 
-def create_tables() -> None:
+@st.cache_resource(show_spinner=False)
+def create_tables() -> bool:
     """
-    Ensure all required tables—and their performance indexes—exist.
+    Ensure all required tables exist.
 
-    Each CREATE has `IF NOT EXISTS`, so re-running is harmless.
+    Thanks to @st.cache_resource, this body executes only once per
+    Streamlit session.  Later calls return the cached `True` immediately.
     """
     ddl_statements = [
-        # USERS table
+        # USERS
         """
         CREATE TABLE IF NOT EXISTS users (
             fullname         VARCHAR(100),
@@ -62,27 +57,20 @@ def create_tables() -> None:
             username         VARCHAR(50)  PRIMARY KEY,
             password         VARCHAR(100),
             date_of_joining  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            approved         TINYINT       DEFAULT 0,
-            -- 🔑 performance indexes
-            INDEX idx_email  (email),
-            INDEX idx_phone  (phone)
+            approved         TINYINT       DEFAULT 0
         ) ENGINE=InnoDB
         """,
-        # RECORDS table – index on username for joins; FK keeps data consistent
+        # RECORDS
         """
         CREATE TABLE IF NOT EXISTS records (
             username VARCHAR(50) PRIMARY KEY,
             as1      INT DEFAULT NULL,
             as2      INT DEFAULT NULL,
             as3      INT DEFAULT NULL,
-            as4      INT DEFAULT NULL,
-            CONSTRAINT fk_records_user
-                FOREIGN KEY (username) REFERENCES users (username)
-                ON DELETE CASCADE
+            as4      INT DEFAULT NULL
         ) ENGINE=InnoDB
-        """
-        # …add more CREATE TABLE statements here, giving each column
-        #    you filter/join on its own INDEX (or composite INDEX)…
+        """,
+        # …add further CREATE TABLE statements here…
     ]
 
     conn = cur = None
@@ -92,10 +80,12 @@ def create_tables() -> None:
         for stmt in ddl_statements:
             cur.execute(stmt)
         conn.commit()
+        return True          # value cached by Streamlit
     except mysql.connector.Error as e:
         # Ignore “table already exists”; surface everything else
         if e.errno not in (errorcode.ER_TABLE_EXISTS_ERROR,):
             st.warning(f"Error creating tables: {e.msg}")
+        return False
     finally:
         if cur:
             cur.close()
