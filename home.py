@@ -1,12 +1,15 @@
-# app.py
-import os, time, functools, logging
+# app.py  – instrumented + circular-import–safe
+import os
+import time
+import functools
+import logging
 import streamlit as st
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Debug / instrumentation toggles
 # ──────────────────────────────────────────────────────────────────────────────
-DEBUG_SQL   = os.getenv("DEBUG_SQL", "1") == "1"   # default **on** for testing
-SHOW_SQL_UI = os.getenv("SHOW_SQL_UI", "0") == "1" # log to page as well as console
+DEBUG_SQL   = os.getenv("DEBUG_SQL", "1") == "1"   # default ON while testing
+SHOW_SQL_UI = os.getenv("SHOW_SQL_UI", "0") == "1" # also show timings in sidebar
 
 if DEBUG_SQL:
     logging.basicConfig(
@@ -16,60 +19,56 @@ if DEBUG_SQL:
     )
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Monkey-patch mysql.connector to time every query
+#  Monkey-patch mysql-connector so every cursor.execute() is timed
 # ──────────────────────────────────────────────────────────────────────────────
-def _patch_mysql_execute():
-    """Wrap mysql.connector.cursor.MySQLCursor.execute with a timer."""
-
+def _patch_mysql_execute() -> None:
+    """Wrap mysql.connector.cursor.MySQLCursor.execute with a timer (once)."""
     if not DEBUG_SQL:
-        return                              # skip entirely in prod
+        return
 
     import mysql.connector
-    if getattr(mysql.connector, "_sql_patched", False):
-        return                              # only patch once
+    if getattr(mysql.connector, "_timed_execute_patched", False):
+        return   # already patched
 
-    original_execute = mysql.connector.cursor.MySQLCursor.execute
-    timings_key      = "_sql_timings"
+    real_exec = mysql.connector.cursor.MySQLCursor.execute
+    timings_key = "_sql_timings"
 
-    def timed_execute(self, operation, params=None, multi=False):
+    def timed_exec(self, operation, params=None, multi=False):
         t0 = time.perf_counter()
-        result = original_execute(self, operation, params=params, multi=multi)
+        result = real_exec(self, operation, params=params, multi=multi)
         dur_ms = (time.perf_counter() - t0) * 1000
 
         # Console log
-        logging.info("[SQL] %6.1f ms  %s", dur_ms,
+        logging.info("[SQL] %7.1f ms  %s", dur_ms,
                      (operation if isinstance(operation, str) else str(operation))
                      .split()[0])
 
-        # Optional on-page log
+        # Optional per-query list in Streamlit session state
         if SHOW_SQL_UI:
             st.session_state.setdefault(timings_key, []).append(
                 (operation.split()[0], dur_ms)
             )
-
         return result
 
-    mysql.connector.cursor.MySQLCursor.execute = timed_execute
-    mysql.connector._sql_patched = True
+    mysql.connector.cursor.MySQLCursor.execute = timed_exec
+    mysql.connector._timed_execute_patched = True
 
 
-_patch_mysql_execute()              # patch as soon as possible, before imports below
+_patch_mysql_execute()  # must run *before* any DB query occurs
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Regular app imports
+#  Regular app imports (only those that do **not** create a circular import)
 # ──────────────────────────────────────────────────────────────────────────────
-from theme import apply_dark_theme
-from database import create_tables      # <- queries now get timed automatically
-from sidebar import show_sidebar
-from home import show_home
-from style import show_footer
-from importlib import import_module
+from theme           import apply_dark_theme
+from database        import create_tables      # now auto-timed
+from sidebar         import show_sidebar
+from style           import show_footer
+from importlib       import import_module
 from github_progress import get_user_progress
 
 
-
 # ──────────────────────────────────────────────────────────────────────────────
-#  Helpers unchanged
+#  Utility helpers (unchanged)
 # ──────────────────────────────────────────────────────────────────────────────
 def safe_rerun():
     if hasattr(st, "experimental_rerun"):
@@ -80,7 +79,8 @@ def safe_rerun():
         st.error("Streamlit rerun functionality is not available.")
 
 
-def enforce_week_gating(selected):
+def enforce_week_gating(selected: str) -> bool:
+    """Return True if the user is allowed to open that week’s module."""
     if selected.startswith("modules_week"):
         try:
             week = int(selected.replace("modules_week", ""))
@@ -88,20 +88,19 @@ def enforce_week_gating(selected):
             return True
         if week == 1:
             return True
-        required_progress = {2: 10, 3: 12, 4: 12, 5: 7}
-        username        = st.session_state.get("username", "default_user")
-        user_prog       = get_user_progress(username)
-        prev_week_key   = f"week{week-1}"
-        prev_progress   = user_prog.get(prev_week_key, 0)
-        return prev_progress >= required_progress.get(week, 0)
+        required = {2: 10, 3: 12, 4: 12, 5: 7}
+        username = st.session_state.get("username", "default_user")
+        user_prog = get_user_progress(username)
+        prev_key  = f"week{week-1}"
+        return user_prog.get(prev_key, 0) >= required.get(week, 0)
     return True
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Main app with page-build stopwatch
+#  Main Streamlit app
 # ──────────────────────────────────────────────────────────────────────────────
-def main():
-    page_start = time.perf_counter()          # ⏱️ start
+def main() -> None:
+    page_start = time.perf_counter()   # ⏱ build timer
 
     st.set_page_config(
         page_title="Code for Impact",
@@ -110,10 +109,10 @@ def main():
     )
 
     apply_dark_theme()
-    create_tables()                           # all its SQL is now timed
+    create_tables()                    # DB work (timed by patch)
 
-    if "page" not in st.session_state:
-        st.session_state["page"] = "offer"
+    # Always have a page key
+    st.session_state.setdefault("page", "offer")
 
     page      = st.session_state["page"]
     logged_in = st.session_state.get("logged_in", False)
@@ -131,7 +130,9 @@ def main():
             return
 
         if page == "home":
-            show_home()
+            # **Lazy import eliminates any circular dependency**
+            import home as _home_module
+            _home_module.show_home()
         else:
             if page.startswith("modules_week") and not enforce_week_gating(page):
                 st.warning("You must complete the previous week before accessing this section.")
@@ -143,7 +144,7 @@ def main():
                 else:
                     st.warning("The selected module does not have a 'show()' function.")
             except ImportError as e:
-                st.warning("Unknown selection: " + str(e))
+                st.warning(f"Unknown selection: {e}")
 
     # ───────────────────────────────────────────────────────────────────────────
     # 2) Pre-login flows
@@ -171,8 +172,8 @@ def main():
     # ───────────────────────────────────────────────────────────────────────────
     # 4) Instrumentation output
     # ───────────────────────────────────────────────────────────────────────────
-    page_ms = (time.perf_counter() - page_start) * 1000
-    st.sidebar.info(f"⏱️ Page build: {page_ms:.0f} ms")
+    total_ms = (time.perf_counter() - page_start) * 1000
+    st.sidebar.info(f"⏱ Page build: {total_ms:.0f} ms")
 
     if SHOW_SQL_UI and "_sql_timings" in st.session_state:
         with st.sidebar.expander("SQL timings"):
